@@ -272,6 +272,149 @@ class FirestoreService {
     await batch.commit();
   }
 
+  Future<void> triggerCaptureCheck(String sessionId) async {
+      final sessionDoc = await _firestore.collection('sessions').doc(sessionId).get();
+      if (!sessionDoc.exists) return;
+      final session = SessionModel.fromFirestore(sessionDoc);
+      
+      final membersSnap = await _firestore
+          .collection('session_members')
+          .where('session_id', isEqualTo: sessionId)
+          .get();
+          
+      final players = membersSnap.docs.map((d) => PlayerModel.fromFirestore(d)).toList();
+      
+      final batch = _firestore.batch();
+      _runGameLogic(session, players, batch, null, null); // No specific user update
+      await batch.commit();
+  }
+
+  Future<void> updatePlayerDistance(String sessionId, String userId, double newDistance) async {
+      // 1. Fetch Session & Players to check rules
+      final sessionDoc = await _firestore.collection('sessions').doc(sessionId).get();
+      if (!sessionDoc.exists) return;
+      final session = SessionModel.fromFirestore(sessionDoc);
+      
+      final membersSnap = await _firestore
+          .collection('session_members')
+          .where('session_id', isEqualTo: sessionId)
+          .get();
+          
+      final players = membersSnap.docs.map((d) => PlayerModel.fromFirestore(d)).toList();
+      
+      // 2. Identify Current State & Update Distance
+      final updatedPlayerIndex = players.indexWhere((p) => p.userId == userId);
+      if (updatedPlayerIndex == -1) return;
+      
+      final updatedPlayer = players[updatedPlayerIndex];
+      
+      final batch = _firestore.batch();
+      
+      // Update the player's distance specifically
+      final myDocRef = _firestore.collection('session_members').doc(updatedPlayer.sessionMemberId);
+      batch.update(myDocRef, {'current_distance': newDistance});
+
+      // 3. Run Logic
+      _runGameLogic(session, players, batch, userId, newDistance);
+      
+      await batch.commit();
+  }
+
+  void _runGameLogic(SessionModel session, List<PlayerModel> players, WriteBatch batch, String? updatingUserId, double? newDistance) {
+      // Calculate maxChaserDistance
+      double maxChaserDistance = 0;
+      for (var p in players) {
+          if (p.role == 'chaser') {
+              double dist = (updatingUserId != null && p.userId == updatingUserId) ? newDistance! : p.currentDistance;
+              if (dist > maxChaserDistance) maxChaserDistance = dist;
+          }
+      }
+
+      // Variables to track game end condition
+      int activeRunnerCount = 0;
+      bool captureHappened = false;
+      final now = DateTime.now();
+
+      for (var p in players) {
+          if (p.role == 'runner' && p.captureState != 'captured') { 
+              // Only check ACTIVE runners
+              
+              // Determine this runner's distance
+              double runnerDist = (updatingUserId != null && p.userId == updatingUserId) ? newDistance! : p.currentDistance;
+              
+              // Check Capture Condition
+              // "If the chaser has that runner difference behind or if they have greater distance"
+              // Chaser >= Runner - ResistanceDistance
+              // If captureResistanceDistance is 0, then Chaser >= Runner
+              bool caught = maxChaserDistance >= (runnerDist - session.captureResistanceDistance);
+              
+              if (caught) {
+                  if (session.instantCapture) {
+                      // Instant Capture
+                      batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
+                          'capture_state': 'captured',
+                          'role': 'spectator',
+                          'capture_deadline': FieldValue.delete(),
+                      });
+                      captureHappened = true;
+                      // DO NOT increment activeRunnerCount
+                  } else {
+                      // Resistance Time
+                      if (p.captureState == 'free') {
+                           // Start being chased
+                           final deadline = now.add(Duration(minutes: session.captureResistanceDuration));
+                           batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
+                              'capture_state': 'being_chased',
+                              'capture_deadline': Timestamp.fromDate(deadline),
+                           });
+                           activeRunnerCount++; // Still a runner (being chased is active)
+                      } else if (p.captureState == 'being_chased') {
+                          // Check if deadline passed
+                          if (p.captureDeadline != null && now.isAfter(p.captureDeadline!.toDate())) {
+                                   batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
+                                      'capture_state': 'captured',
+                                      'role': 'spectator',
+                                      'capture_deadline': FieldValue.delete(),
+                                   });
+                                   captureHappened = true;
+                                   // DO NOT increment activeRunnerCount
+                          } else {
+                               // Still being chased (or fix missing deadline)
+                              if (p.captureDeadline == null) {
+                                   final deadline = now.add(Duration(minutes: session.captureResistanceDuration));
+                                   batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
+                                      'capture_deadline': Timestamp.fromDate(deadline), 
+                                   });
+                              }
+                              activeRunnerCount++; // Still a runner
+                          }
+                      } else {
+                           activeRunnerCount++;
+                      }
+                  }
+              } else {
+                  // Not Caught (Escaped or Ahead)
+                  if (p.captureState == 'being_chased') {
+                      // Escaped!
+                      batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
+                          'capture_state': 'free',
+                          'capture_deadline': FieldValue.delete(),
+                      });
+                  }
+                  activeRunnerCount++; // Still a runner
+              }
+          }
+      }
+      
+      // If we are processing updates and it results in 0 active runners, end the game.
+      if (activeRunnerCount == 0 && players.isNotEmpty && session.status == 'active') { // Only stop if active
+           batch.update(_firestore.collection('sessions').doc(session.id), {
+             'status': 'completed',
+             'end_time': FieldValue.serverTimestamp(),
+           });
+      }
+  }
+
   Future<void> stopGame(String sessionId) async {
     await _firestore.collection('sessions').doc(sessionId).update({
       'status': 'completed',

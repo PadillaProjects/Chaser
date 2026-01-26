@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:chaser/models/player.dart';
 import 'package:chaser/models/player_profile.dart'; // Added
 import 'package:chaser/models/session.dart';
 import 'package:chaser/screens/session/edit_session_sheet.dart';
@@ -123,7 +125,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                       tooltip: 'Leave Game',
                       onPressed: _leaveSession,
                     ),
-                  if (isOwner)
+                  if (isOwner && session.status == 'pending')
                     IconButton(
                       icon: const Icon(Icons.settings),
                       onPressed: () {
@@ -250,21 +252,76 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               Expanded(
                 child: playersAsync.when(
                   loading: () => const Center(child: CircularProgressIndicator()),
-                  error: (err, _) => Center(child: Text('$err')),
+                  error: (e,s) => Center(child: Text('Error loading players: $e')),
                   data: (players) {
                     if (players.isEmpty) return const Center(child: Text('No players yet'));
                     
-                    return ListView.builder(
-                      itemCount: players.length,
-                      itemBuilder: (context, index) {
-                        final player = players[index];
-                        return SessionPlayerTile(
-                          userId: player.userId,
-                          role: player.role,
-                          isOwner: player.isOwner,
-                          currentDistance: player.currentDistance,
-                        );
-                      },
+                    final myPlayer = players.where((p) => p.userId == currentUser?.uid).firstOrNull;
+                    final showCaptureWarning = myPlayer?.captureState == 'being_chased' && myPlayer?.captureDeadline != null;
+
+                    // Check if I am a chaser and any runner is being chased
+                    final isChaser = myPlayer?.role == 'chaser';
+                    final victims = players.where((p) => p.role == 'runner' && p.captureState == 'being_chased' && p.captureDeadline != null).toList();
+                    final showChaserStatus = isChaser && victims.isNotEmpty;
+
+                    return Stack(
+                      children: [
+                        // Game Loop Monitor: Runs logic for everyone if needed
+                        _GameLoopMonitor(
+                          sessionId: widget.sessionId,
+                          players: players,
+                        ),
+                        Column(
+                          children: [
+                            if (showCaptureWarning)
+                              Container(
+                                color: Colors.red.withOpacity(0.1),
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 32),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text('Capture Imminent!', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                          const Text('Escape by increasing your distance!', style: TextStyle(fontSize: 12)),
+                                          const SizedBox(height: 4),
+                                          _CaptureTimer(
+                                              endTime: myPlayer!.captureDeadline!.toDate(),
+                                              onExpired: () => FirestoreService().triggerCaptureCheck(widget.sessionId),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                             if (showChaserStatus)
+                               _ChaserCaptureStatus(
+                                 victims: victims,
+                                 sessionId: widget.sessionId,
+                               ),
+                            Expanded(
+                              child: ListView.builder(
+                                itemCount: players.length,
+                                itemBuilder: (context, index) {
+                                  final player = players[index];
+                                  return SessionPlayerTile(
+                                    sessionId: widget.sessionId,
+                                    userId: player.userId,
+                                    role: player.role,
+                                    isOwner: player.isOwner,
+                                    currentDistance: player.currentDistance,
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -444,17 +501,19 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
 }
 
 class SessionPlayerTile extends ConsumerWidget {
+  final String sessionId;
   final String userId;
   final String role;
   final bool isOwner;
-  final double currentDistance; // Added
+  final double currentDistance;
 
   const SessionPlayerTile({
     super.key,
+    required this.sessionId,
     required this.userId,
     required this.role,
     this.isOwner = false,
-    this.currentDistance = 0, // Added default
+    this.currentDistance = 0,
   });
 
   @override
@@ -498,13 +557,20 @@ class SessionPlayerTile extends ConsumerWidget {
   }
 
   Future<void> _showPlayerStats(BuildContext context, WidgetRef ref, String displayName) async {
-      showDialog(
+      await showDialog(
         context: context,
         builder: (context) => AlertDialog(
             title: Text('$displayName\'s Stats'),
             content: Consumer(
                 builder: (context, ref, child) {
                     final otherPlayerStats = ref.watch(otherPlayerProfileFamily(userId));
+                    final sessionPlayersAsync = ref.watch(playersStreamProvider(sessionId));
+                    
+                    // Get live session data for this player
+                    final livePlayer = sessionPlayersAsync.asData?.value
+                        .where((p) => p.userId == userId)
+                        .firstOrNull;
+                    final liveDistance = livePlayer?.currentDistance ?? 0.0;
                     
                     return otherPlayerStats.when(
                         data: (stats) {
@@ -521,6 +587,28 @@ class SessionPlayerTile extends ConsumerWidget {
                                     Text('Escapes: ${stats.totalEscapes}'),
                                     const SizedBox(height: 8),
                                     Text('Total Distance: ${stats.totalDistance.toStringAsFixed(1)}m'),
+                                    const Divider(),
+                                    const Text('Debug Distance:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    Text('Current: ${liveDistance.toStringAsFixed(1)}m'),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.remove_circle_outline),
+                                          onPressed: () => _updateDistance(liveDistance, -1.0),
+                                          tooltip: '-1m',
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.add_circle_outline),
+                                          onPressed: () => _updateDistance(liveDistance, 1.0),
+                                          tooltip: '+1m',
+                                        ),
+                                        TextButton(
+                                          onPressed: () => _setDistanceDialog(context, liveDistance),
+                                          child: const Text('Set'),
+                                        ),
+                                      ],
+                                    ),
                                 ],
                             );
                         },
@@ -533,6 +621,43 @@ class SessionPlayerTile extends ConsumerWidget {
                 TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
             ],
         ),
+      );
+  }
+
+  Future<void> _updateDistance(double currentDist, double delta) async {
+      final newDistance = (currentDist + delta) < 0 ? 0.0 : (currentDist + delta);
+      await FirestoreService().updatePlayerDistance(sessionId, userId, newDistance);
+  }
+
+  Future<void> _setDistanceDialog(BuildContext context, double currentDist) async {
+      final controller = TextEditingController(text: currentDist.toStringAsFixed(1));
+      
+      await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+              title: const Text('Set Distance'),
+              content: TextField(
+                  controller: controller,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Distance (meters)'),
+              ),
+              actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                      onPressed: () async {
+                          final val = double.tryParse(controller.text);
+                          if (val != null) {
+                              await FirestoreService().updatePlayerDistance(sessionId, userId, val);
+                              if (context.mounted) Navigator.pop(context);
+                          }
+                      },
+                      child: const Text('Save'),
+                  ),
+              ],
+          ),
       );
   }
 }
@@ -574,4 +699,184 @@ class _HeadstartTimerState extends State<_HeadstartTimer> {
             }
         );
     }
+}
+
+class _CaptureTimer extends StatefulWidget {
+    final DateTime endTime;
+    final VoidCallback? onExpired;
+    
+    const _CaptureTimer({required this.endTime, this.onExpired, Key? key}) : super(key: key);
+    
+    @override
+    State<_CaptureTimer> createState() => _CaptureTimerState();
+}
+
+class _CaptureTimerState extends State<_CaptureTimer> {
+    late Stream<int> _timer;
+    bool _expiredTriggered = false;
+    
+    @override
+    void initState() {
+        super.initState();
+        _timer = Stream.periodic(const Duration(seconds: 1), (x) => x);
+    }
+    
+    @override
+    Widget build(BuildContext context) {
+        return StreamBuilder<int>(
+            stream: _timer,
+            builder: (context, snapshot) {
+                final now = DateTime.now();
+                final remaining = widget.endTime.difference(now);
+                
+                if (remaining.isNegative) {
+                    if (!_expiredTriggered) {
+                        _expiredTriggered = true;
+                        // Schedule callback for next frame to avoid build-time side effects
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                           widget.onExpired?.call();
+                        });
+                    }
+                    return const Text('Capturing...', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold));
+                }
+                
+                // Reset trigger if we go back to positive (e.g. deadline extended? unlikely but safe)
+                // _expiredTriggered = false; 
+
+                final m = remaining.inMinutes;
+                final s = (remaining.inSeconds % 60).toString().padLeft(2, '0');
+                
+                return Text(
+                    'Time remaining: $m:$s', 
+                    style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)
+                );
+            }
+        );
+    }
+}
+
+class _GameLoopMonitor extends StatefulWidget {
+  final String sessionId;
+  final List<PlayerModel> players;
+
+  const _GameLoopMonitor({
+    required this.sessionId,
+    required this.players,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  State<_GameLoopMonitor> createState() => _GameLoopMonitorState();
+}
+
+class _GameLoopMonitorState extends State<_GameLoopMonitor> {
+  Timer? _monitorTimer;
+  bool _isTriggering = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check every 2 seconds
+    _monitorTimer = Timer.periodic(const Duration(seconds: 2), _checkDeadlines);
+  }
+
+  @override
+  void dispose() {
+    _monitorTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkDeadlines(Timer t) async {
+    if (_isTriggering) return; // Debounce
+
+    final now = DateTime.now();
+    bool needsTrigger = false;
+
+    // Check if ANY runner has an expired deadline
+    for (final player in widget.players) {
+      if (player.role == 'runner' && 
+          player.captureState == 'being_chased' &&
+          player.captureDeadline != null) {
+          
+          if (now.isAfter(player.captureDeadline!.toDate())) {
+            needsTrigger = true;
+            break;
+          }
+      }
+    }
+
+    if (needsTrigger) {
+      _isTriggering = true;
+      debugPrint("GameLoopMonitor: Detected expired deadline. Triggering capture check...");
+      try {
+        await FirestoreService().triggerCaptureCheck(widget.sessionId);
+      } catch (e) {
+        debugPrint("GameLoopMonitor Error: $e");
+      } finally {
+        if (mounted) {
+           setState(() {
+             _isTriggering = false;
+           });
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.shrink(); // Invisible widget
+  }
+}
+
+class _ChaserCaptureStatus extends ConsumerWidget {
+  final List<PlayerModel> victims;
+  final String sessionId;
+
+  const _ChaserCaptureStatus({
+    required this.victims, 
+    required this.sessionId,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+      if (victims.isEmpty) return const SizedBox.shrink();
+
+      // For simplicity, display the first victim found (or format list)
+      final victim = victims.first;
+      final userProfileAsync = ref.watch(userProfileFamily(victim.userId));
+      
+      return Container(
+        color: Colors.green.withOpacity(0.1),
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.track_changes, color: Colors.green, size: 32),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  userProfileAsync.when(
+                    data: (profile) => Text(
+                        'You are capturing ${profile?.displayName ?? 'Runner'}!', 
+                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)
+                    ),
+                    loading: () => const Text('You are capturing...', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    error: (_,__) => const Text('You are capturing...', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                  ),
+                  const Text("Don't let them escape!", style: TextStyle(fontSize: 12)),
+                  const SizedBox(height: 4),
+                  _CaptureTimer(
+                      endTime: victim.captureDeadline!.toDate(),
+                      onExpired: () => FirestoreService().triggerCaptureCheck(sessionId),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+  }
 }

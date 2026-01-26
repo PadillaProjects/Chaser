@@ -10,7 +10,8 @@ class PlayerModel {
   final double currentDistance;
   final int totalSteps;
   final String captureState; // 'free', 'being_chased', 'captured'
-  final Timestamp? joinedAt;
+  final Timestamp? captureDeadline; // Added
+  final Timestamp? joinedAt; // Added back
 
   PlayerModel({
     required this.sessionMemberId,
@@ -23,6 +24,7 @@ class PlayerModel {
     this.totalSteps = 0,
     this.captureState = 'free',
     this.joinedAt,
+    this.captureDeadline,
   });
 
   factory PlayerModel.fromFirestore(DocumentSnapshot doc) {
@@ -38,6 +40,7 @@ class PlayerModel {
       totalSteps: data['total_steps'] ?? 0,
       captureState: data['capture_state'] ?? 'free',
       joinedAt: data['joined_at'] as Timestamp?,
+      captureDeadline: data['capture_deadline'] as Timestamp?,
     );
   }
 
@@ -52,6 +55,7 @@ class PlayerModel {
       'total_steps': totalSteps,
       'capture_state': captureState,
       'joined_at': joinedAt ?? FieldValue.serverTimestamp(),
+      'capture_deadline': captureDeadline,
     };
   }
 }

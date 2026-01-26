@@ -75,7 +75,7 @@ class AuthService {
       // Update display name
       await userCredential.user!.updateDisplayName(displayName);
 
-      await _handleUserCreation(userCredential, 'email');
+      await _handleUserCreation(userCredential, 'email', explicitName: displayName);
       return userCredential;
     } catch (e) {
       debugPrint('Registration Error: $e');
@@ -90,26 +90,26 @@ class AuthService {
 
   /// Handle user creation in Firestore
   Future<void> _handleUserCreation(
-      UserCredential userCredential, String provider) async {
+      UserCredential userCredential, String provider, {String? explicitName}) async {
     final user = userCredential.user!;
     
     // Check if user doc exists
     final userDoc = await _firestore.collection('users').doc(user.uid).get();
     
     if (!userDoc.exists) {
-      await _createUserProfile(user, provider);
+      await _createUserProfile(user, provider, explicitName: explicitName);
     } else {
       await _updateLastLogin(user);
     }
   }
 
-  Future<void> _createUserProfile(User user, String provider) async {
+  Future<void> _createUserProfile(User user, String provider, {String? explicitName}) async {
     final batch = _firestore.batch();
     
     final userRef = _firestore.collection('users').doc(user.uid);
     batch.set(userRef, {
       'email': user.email,
-      'display_name': user.displayName ?? 'Unknown',
+      'display_name': explicitName ?? user.displayName ?? 'Unknown',
       'photo_url': user.photoURL,
       'auth_provider': provider,
       'created_at': FieldValue.serverTimestamp(),
