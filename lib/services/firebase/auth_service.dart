@@ -122,10 +122,17 @@ class AuthService {
       'user_id': user.uid,
       'level': 1,
       'total_xp': 0,
+      'xp_to_next_level': 1000,
       'total_coins': 0,
-      'total_distance': 0,
+      'total_coins_earned': 0,
+      'total_coins_spent': 0,
+      'total_distance': 0.0,
       'total_games_played': 0,
-      'unit_preference': 'metric',
+      'total_wins': 0,
+      'total_losses': 0,
+      'total_captures': 0,
+      'total_escapes': 0,
+      'total_times_captured': 0,
       'created_at': FieldValue.serverTimestamp(),
     });
 
@@ -136,5 +143,18 @@ class AuthService {
     await _firestore.collection('users').doc(user.uid).update({
       'last_login': FieldValue.serverTimestamp(),
     });
+  }
+
+  Future<void> updateDisplayName(String newName) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      // Update Firebase Auth
+      await user.updateDisplayName(newName);
+      
+      // Update Firestore
+      await _firestore.collection('users').doc(user.uid).update({
+        'display_name': newName,
+      });
+    }
   }
 }

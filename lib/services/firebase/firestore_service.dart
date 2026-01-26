@@ -1,5 +1,6 @@
 import 'package:chaser/models/player.dart';
 import 'package:chaser/models/session.dart';
+import 'package:chaser/models/user_profile.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FirestoreService {
@@ -38,6 +39,30 @@ class FirestoreService {
 
   Future<void> updateSession(String sessionId, Map<String, dynamic> data) async {
     await _firestore.collection('sessions').doc(sessionId).update(data);
+  }
+
+  // --- Users ---
+
+  Stream<UserProfile> watchUserProfile(String userId) {
+    return _firestore
+        .collection('users')
+        .doc(userId)
+        .snapshots()
+        .map((doc) {
+            if (!doc.exists) {
+                // Return a dummy profile or handle error? 
+                // For now returning a partial profile with 'Unknown'
+                return UserProfile(
+                    uid: userId, 
+                    email: '', 
+                    displayName: 'Unknown', 
+                    authProvider: '', 
+                    createdAt: DateTime.now(), 
+                    lastLogin: DateTime.now()
+                );
+            }
+            return UserProfile.fromFirestore(doc);
+        });
   }
 
   // --- Players ---

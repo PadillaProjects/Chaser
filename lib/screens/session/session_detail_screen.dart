@@ -4,6 +4,7 @@ import 'package:chaser/services/firebase/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:chaser/models/user_profile.dart'; 
 import 'package:go_router/go_router.dart';
 
 final sessionStreamProvider = StreamProvider.family((ref, String sessionId) {
@@ -12,6 +13,10 @@ final sessionStreamProvider = StreamProvider.family((ref, String sessionId) {
 
 final playersStreamProvider = StreamProvider.family((ref, String sessionId) {
   return FirestoreService().watchSessionPlayers(sessionId);
+});
+
+final userProfileFamily = StreamProvider.family<UserProfile, String>((ref, String userId) {
+  return FirestoreService().watchUserProfile(userId);
 });
 
 class SessionDetailScreen extends ConsumerStatefulWidget {
@@ -231,15 +236,10 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                       itemCount: players.length,
                       itemBuilder: (context, index) {
                         final player = players[index];
-                        return ListTile(
-                          leading: CircleAvatar(
-                            child: Text(player.role[0].toUpperCase()),
-                          ),
-                          title: Text(player.userId), // Pending: Fetch user name
-                          subtitle: Text(player.role),
-                          trailing: player.isOwner 
-                              ? const Icon(Icons.star, color: Colors.amber) 
-                              : null,
+                        return SessionPlayerTile(
+                          userId: player.userId,
+                          role: player.role,
+                          isOwner: player.isOwner,
                         );
                       },
                     );
@@ -299,6 +299,48 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class SessionPlayerTile extends ConsumerWidget {
+  final String userId;
+  final String role;
+  final bool isOwner;
+
+  const SessionPlayerTile({
+    super.key,
+    required this.userId,
+    required this.role,
+    this.isOwner = false,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userProfileAsync = ref.watch(userProfileFamily(userId));
+
+    return userProfileAsync.when(
+      data: (user) {
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundImage: user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
+            child: user.photoUrl == null ? Text(user.displayName[0].toUpperCase()) : null,
+          ),
+          title: Text(user.displayName),
+          subtitle: Text(role),
+          trailing: isOwner 
+              ? const Icon(Icons.star, color: Colors.amber) 
+              : null,
+        );
+      },
+      loading: () => const ListTile(
+        leading: CircleAvatar(child: CircularProgressIndicator(strokeWidth: 2)),
+        title: Text('Loading...'),
+      ),
+      error: (_, __) => ListTile(
+        leading: const CircleAvatar(child: Icon(Icons.error)),
+        title: Text('Unknown User ($userId)'),
       ),
     );
   }

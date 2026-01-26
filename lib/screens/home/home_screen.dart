@@ -32,10 +32,8 @@ class HomeScreen extends ConsumerWidget {
         title: const Text('My Games'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await AuthService().signOut();
-            },
+            icon: const Icon(Icons.person),
+            onPressed: () => context.push('/profile'),
           ),
         ],
       ),

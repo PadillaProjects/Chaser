@@ -4,6 +4,7 @@ import 'package:chaser/screens/auth/login_screen.dart';
 import 'package:chaser/screens/home/home_screen.dart';
 import 'package:chaser/screens/session/create_session_screen.dart';
 import 'package:chaser/screens/session/session_detail_screen.dart';
+import 'package:chaser/screens/profile/profile_screen.dart';
 import 'package:chaser/services/firebase/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -60,6 +61,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['id']!;
           return SessionDetailScreen(sessionId: id);
         },
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen(),
       ),
     ],
   );
