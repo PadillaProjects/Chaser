@@ -47,6 +47,8 @@ dependencies:
   health: ^13.2.1
   connectivity_plus: ^7.0.0
   rxdart: ^0.28.0
+  google_sign_in: ^6.2.1
+  sign_in_with_apple: ^7.0.1
 
 dev_dependencies:
   flutter_test:
