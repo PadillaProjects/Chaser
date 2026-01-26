@@ -1,4 +1,5 @@
 import 'package:chaser/models/player.dart';
+import 'package:chaser/models/player_profile.dart'; // Added
 import 'package:chaser/models/session.dart';
 import 'package:chaser/models/user_profile.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -63,6 +64,13 @@ class FirestoreService {
             }
             return UserProfile.fromFirestore(doc);
         });
+  }
+  
+  Stream<PlayerProfile?> watchPlayerProfile(String userId) {
+      return _firestore.collection('player_profiles').doc(userId).snapshots().map((doc) {
+          if (!doc.exists) return null;
+          return PlayerProfile.fromFirestore(doc);
+      });
   }
 
   // --- Players ---
@@ -210,6 +218,94 @@ class FirestoreService {
     // Join the first one found (codes should be unique enough)
     final sessionDoc = snapshot.docs.first;
     await joinSession(sessionDoc.id, userId);
+  }
+
+  Future<void> startGame(String sessionId, SessionModel session) async {
+    // 1. Fetch current members
+    final membersSnapshot = await _firestore
+        .collection('session_members')
+        .where('session_id', isEqualTo: sessionId)
+        .get();
+
+    if (membersSnapshot.docs.length < 2) {
+      throw Exception('Need at least 2 players to start.');
+    }
+
+    final members = membersSnapshot.docs.toList();
+    
+    // 2. Shuffle
+    members.shuffle();
+
+    // 3. Determine Chaser Count
+    // Use settings, but ensure at least 1 and leave at least 1 runner
+    int chaserCount = session.numChasers;
+    if (chaserCount < 1) chaserCount = 1;
+    if (chaserCount >= members.length) chaserCount = members.length - 1;
+
+    // 4. Batch Update
+    final batch = _firestore.batch();
+    
+    // Update Members
+    for (int i = 0; i < members.length; i++) {
+        final role = i < chaserCount ? 'chaser' : 'runner';
+        final initialDistance = role == 'runner' ? session.headstartDistance : 0.0;
+        
+        batch.update(members[i].reference, {
+            'role': role,
+            'capture_state': 'free', // Reset capture state just in case
+            'current_distance': initialDistance,
+            'total_steps': 0,
+            // 'joined_at' is preserved
+        });
+    }
+
+    // Update Session
+    final startTime = DateTime.now();
+    final endTime = startTime.add(Duration(days: session.durationDays));
+    
+    batch.update(_firestore.collection('sessions').doc(sessionId), {
+        'status': 'active',
+        'actual_start_time': Timestamp.fromDate(startTime),
+        'end_time': Timestamp.fromDate(endTime),
+    });
+
+    await batch.commit();
+  }
+
+  Future<void> stopGame(String sessionId) async {
+    await _firestore.collection('sessions').doc(sessionId).update({
+      'status': 'completed',
+      'end_time': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> resetGame(String sessionId) async {
+      // 1. Fetch current members
+    final membersSnapshot = await _firestore
+        .collection('session_members')
+        .where('session_id', isEqualTo: sessionId)
+        .get();
+
+    final batch = _firestore.batch();
+    
+    // Reset players
+    for (var doc in membersSnapshot.docs) {
+        batch.update(doc.reference, {
+            'role': 'spectator',
+            'current_distance': 0,
+            'total_steps': 0,
+            'capture_state': 'free',
+        });
+    }
+    
+    // Reset session
+    batch.update(_firestore.collection('sessions').doc(sessionId), {
+        'status': 'pending',
+        'actual_start_time': FieldValue.delete(),
+        'end_time': FieldValue.delete(),
+    });
+    
+    await batch.commit();
   }
 
   Stream<List<SessionModel>> watchUserSessions(String userId) {

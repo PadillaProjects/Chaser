@@ -1,3 +1,5 @@
+import 'package:chaser/models/player_profile.dart'; // Added
+import 'package:chaser/models/session.dart';
 import 'package:chaser/screens/session/edit_session_sheet.dart';
 import 'package:chaser/services/firebase/auth_service.dart';
 import 'package:chaser/services/firebase/firestore_service.dart';
@@ -17,6 +19,10 @@ final playersStreamProvider = StreamProvider.family((ref, String sessionId) {
 
 final userProfileFamily = StreamProvider.family<UserProfile, String>((ref, String userId) {
   return FirestoreService().watchUserProfile(userId);
+});
+
+final otherPlayerProfileFamily = StreamProvider.family<PlayerProfile?, String>((ref, String userId) {
+   return FirestoreService().watchPlayerProfile(userId);
 });
 
 class SessionDetailScreen extends ConsumerStatefulWidget {
@@ -154,11 +160,27 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     const SizedBox(height: 8),
-                    Chip(
-                      label: Text(session.status.toUpperCase()),
-                      backgroundColor: session.status == 'active' 
-                          ? Colors.green[100] 
-                          : Colors.orange[100],
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        Chip(
+                          label: Text(session.status.toUpperCase()),
+                          backgroundColor: session.status == 'active' 
+                              ? Colors.green[100] 
+                              : Colors.orange[100],
+                        ),
+                        if (session.status == 'active' && _isheadstartActive(session))
+                             Chip(
+                                avatar: const Icon(Icons.timer, size: 16),
+                                label: _HeadstartTimer(
+                                    endTime: (session.actualStartTime?.toDate() ?? 
+                                             session.scheduledStartTime?.toDate() ?? 
+                                             DateTime.now())
+                                            .add(Duration(minutes: session.headstartDuration)),
+                                ),
+                                backgroundColor: Colors.amber[100],
+                            ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Text('${session.gameMode} • ${session.durationDays} Days • ${session.visibility.toUpperCase()}'),
@@ -240,6 +262,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                           userId: player.userId,
                           role: player.role,
                           isOwner: player.isOwner,
+                          currentDistance: player.currentDistance,
                         );
                       },
                     );
@@ -247,8 +270,17 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                 ),
               ),
               
-              // Scheduled Start & Start Button (Owner Only)
-              if (session.ownerId == currentUser?.uid && session.status == 'pending')
+              if (session.ownerId == currentUser?.uid && session.status == 'active') ...[
+                 Padding(
+                   padding: const EdgeInsets.all(16.0),
+                   child: ElevatedButton.icon(
+                     onPressed: () => _stopGame(session.id),
+                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                     icon: const Icon(Icons.stop),
+                     label: const Text('Stop Game'),
+                   ),
+                 )
+              ] else if (session.ownerId == currentUser?.uid && session.status == 'pending') ...[
                  Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -278,20 +310,30 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                       ),
                       const SizedBox(height: 8),
                       ElevatedButton(
-                        onPressed: () {
-                          // Logic to start game
-                        },
+                        onPressed: () => _startGame(session),
                         child: const Text('Start Game Now'),
                       ),
                     ],
                   ),
                 )
-              else 
+              ] else if (session.ownerId == currentUser?.uid && session.status == 'completed') ...[
+                  Padding(
+                   padding: const EdgeInsets.all(16.0),
+                   child: ElevatedButton.icon(
+                     onPressed: () => _resetGame(session.id),
+                     style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                     icon: const Icon(Icons.refresh),
+                     label: const Text('Reset Game'),
+                   ),
+                 )
+              ] else 
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Center(
                     child: Text(
-                      session.status == 'active' ? 'Game in progress' : 'Waiting for host to start...',
+                      session.status == 'active' ? 'Game in progress' : 
+                      session.status == 'completed' ? 'Game Completed' :
+                      'Waiting for host to start...',
                       style: const TextStyle(fontStyle: FontStyle.italic),
                     ),
                   ),
@@ -302,24 +344,123 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
       ),
     );
   }
+
+  Future<void> _startGame(SessionModel session) async {
+    try {
+      await _firestoreService.startGame(widget.sessionId, session);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Game Started!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error starting game: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopGame(String sessionId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Stop Game?'),
+        content: const Text('Are you sure you want to stop this game? This will calculate results and end the session.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Stop Game'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+        try {
+            await _firestoreService.stopGame(sessionId);
+             if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Game Stopped!')),
+                );
+              }
+        } catch(e) {
+             if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error stopping game: $e')),
+                );
+              }
+        }
+    }
+  }
+
+  Future<void> _resetGame(String sessionId) async {
+      final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Game?'),
+        content: const Text('This will reset the game to pending state. All players will remain in the lobby.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+         try {
+            await _firestoreService.resetGame(sessionId);
+             if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Game Reset!')),
+                );
+              }
+        } catch(e) {
+             if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error resetting game: $e')),
+                );
+              }
+        }
+    }
+  }
+
+  bool _isheadstartActive(SessionModel session) {
+    if (session.headstartDuration <= 0) return false;
+    // Prefer actualStartTime if game started, fall back to scheduled if just checking preview (though this method is mostly for active state)
+    final start = session.actualStartTime?.toDate() ?? session.scheduledStartTime?.toDate();
+    if (start == null) return false;
+    
+    final end = start.add(Duration(minutes: session.headstartDuration));
+    return DateTime.now().isBefore(end);
+  }
 }
 
 class SessionPlayerTile extends ConsumerWidget {
   final String userId;
   final String role;
   final bool isOwner;
+  final double currentDistance; // Added
 
   const SessionPlayerTile({
     super.key,
     required this.userId,
     required this.role,
     this.isOwner = false,
+    this.currentDistance = 0, // Added default
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userProfileAsync = ref.watch(userProfileFamily(userId));
-
+    
     return userProfileAsync.when(
       data: (user) {
         return ListTile(
@@ -328,10 +469,21 @@ class SessionPlayerTile extends ConsumerWidget {
             child: user.photoUrl == null ? Text(user.displayName[0].toUpperCase()) : null,
           ),
           title: Text(user.displayName),
-          subtitle: Text(role),
+          subtitle: Row(
+            children: [
+                Text(role),
+                if (currentDistance >= 0) ...[
+                    const SizedBox(width: 8),
+                    Container(width: 1, height: 12, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Text('${currentDistance.toStringAsFixed(0)}m', style: const TextStyle(fontWeight: FontWeight.bold)),
+                ]
+            ],
+          ),
           trailing: isOwner 
               ? const Icon(Icons.star, color: Colors.amber) 
-              : null,
+              : const Icon(Icons.info_outline, color: Colors.grey),
+          onTap: () => _showPlayerStats(context, ref, user.displayName),
         );
       },
       loading: () => const ListTile(
@@ -344,4 +496,82 @@ class SessionPlayerTile extends ConsumerWidget {
       ),
     );
   }
+
+  Future<void> _showPlayerStats(BuildContext context, WidgetRef ref, String displayName) async {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+            title: Text('$displayName\'s Stats'),
+            content: Consumer(
+                builder: (context, ref, child) {
+                    final otherPlayerStats = ref.watch(otherPlayerProfileFamily(userId));
+                    
+                    return otherPlayerStats.when(
+                        data: (stats) {
+                            if (stats == null) return const Text('No stats available.');
+                            return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                    Text('Level: ${stats.level}'),
+                                    const SizedBox(height: 8),
+                                    Text('Games Played: ${stats.totalGamesPlayed}'),
+                                    Text('Wins: ${stats.totalWins}'),
+                                    Text('Captures: ${stats.totalCaptures}'),
+                                    Text('Escapes: ${stats.totalEscapes}'),
+                                    const SizedBox(height: 8),
+                                    Text('Total Distance: ${stats.totalDistance.toStringAsFixed(1)}m'),
+                                ],
+                            );
+                        },
+                        loading: () => const Center(child: CircularProgressIndicator()),
+                        error: (e,s) => Text('Error: $e'),
+                    );
+                }
+            ),
+            actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+            ],
+        ),
+      );
+  }
+}
+
+class _HeadstartTimer extends StatefulWidget {
+    final DateTime endTime;
+    
+    const _HeadstartTimer({required this.endTime, Key? key}) : super(key: key);
+    
+    @override
+    State<_HeadstartTimer> createState() => _HeadstartTimerState();
+}
+
+class _HeadstartTimerState extends State<_HeadstartTimer> {
+    late Stream<int> _timer;
+    
+    @override
+    void initState() {
+        super.initState();
+        _timer = Stream.periodic(const Duration(seconds: 1), (x) => x);
+    }
+    
+    @override
+    Widget build(BuildContext context) {
+        return StreamBuilder<int>(
+            stream: _timer,
+            builder: (context, snapshot) {
+                final now = DateTime.now();
+                final remaining = widget.endTime.difference(now);
+                
+                if (remaining.isNegative) {
+                    return const Text('Started!');
+                }
+                
+                final m = remaining.inMinutes;
+                final s = (remaining.inSeconds % 60).toString().padLeft(2, '0');
+                
+                return Text('Release in $m:$s');
+            }
+        );
+    }
 }

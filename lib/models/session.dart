@@ -36,6 +36,7 @@ class SessionModel {
   final double captureResistanceDistance; // in meters
 
   final Timestamp? scheduledStartTime;
+  final Timestamp? actualStartTime; // Added
   final Timestamp? createdAt;
 
   SessionModel({
@@ -61,6 +62,7 @@ class SessionModel {
     this.captureResistanceDuration = 0,
     this.captureResistanceDistance = 0,
     this.scheduledStartTime,
+    this.actualStartTime, // Added
     this.createdAt,
   });
 
@@ -94,6 +96,7 @@ class SessionModel {
       captureResistanceDistance: (settings['capture_resistance_distance'] as num?)?.toDouble() ?? 0.0,
       
       scheduledStartTime: data['scheduled_start_time'] as Timestamp?,
+      actualStartTime: data['actual_start_time'] as Timestamp?, // Added
       createdAt: data['created_at'] as Timestamp?,
     );
   }
@@ -123,6 +126,7 @@ class SessionModel {
         'capture_resistance_distance': captureResistanceDistance,
       },
       'scheduled_start_time': scheduledStartTime,
+      'actual_start_time': actualStartTime, // Added
       'created_at': createdAt ?? FieldValue.serverTimestamp(),
     };
   }
@@ -150,6 +154,7 @@ class SessionModel {
       captureResistanceDuration: captureResistanceDuration,
       captureResistanceDistance: captureResistanceDistance,
       scheduledStartTime: scheduledStartTime,
+      actualStartTime: actualStartTime,
       createdAt: createdAt,
     );
   }
