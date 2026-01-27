@@ -1,5 +1,7 @@
+import 'package:chaser/config/colors.dart';
 import 'package:chaser/services/firebase/auth_service.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -28,7 +30,6 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       await _authService.signInWithGoogle();
-      // Navigation is handled by router based on auth state
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -83,102 +84,246 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Chaser',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 48, 
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                ),
-              ),
-              const SizedBox(height: 60),
-              
-              if (_isRegistering)
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Display Name',
-                    prefixIcon: Icon(Icons.person),
+      body: Container(
+        decoration: BoxDecoration(
+          color: AppColors.voidBlack,
+          gradient: RadialGradient(
+            center: Alignment.center,
+            radius: 1.5,
+            colors: [
+              AppColors.voidBlack,
+              AppColors.voidBlack,
+              Colors.black,
+            ],
+            stops: const [0.0, 0.7, 1.0],
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Title with glow effect
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    'CHASER',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.creepster(
+                      fontSize: 64,
+                      color: AppColors.bloodRed,
+                      letterSpacing: 8,
+                      shadows: [
+                        Shadow(
+                          color: AppColors.bloodRed.withOpacity(0.8),
+                          blurRadius: 20,
+                        ),
+                        Shadow(
+                          color: AppColors.bloodRed.withOpacity(0.5),
+                          blurRadius: 40,
+                        ),
+                        Shadow(
+                          color: AppColors.bloodRed.withOpacity(0.3),
+                          blurRadius: 60,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              if (_isRegistering) const SizedBox(height: 16),
-              
-              TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  prefixIcon: Icon(Icons.email),
+
+                // Tagline
+                Text(
+                  'THE HUNT AWAITS',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                    letterSpacing: 6,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: Icon(Icons.lock),
-                ),
-              ),
-              const SizedBox(height: 24),
-              
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleEmailAuth,
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(_isRegistering ? 'Register' : 'Sign In'),
-              ),
-              
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _isRegistering = !_isRegistering;
-                  });
-                },
-                child: Text(
-                  _isRegistering
-                      ? 'Already have an account? Sign In'
-                      : 'Create an account',
-                ),
-              ),
-              
-              const SizedBox(height: 24),
-              const Row(
-                children: [
-                   Expanded(child: Divider()),
-                   Padding(
-                     padding: EdgeInsets.symmetric(horizontal: 16),
-                     child: Text('OR'),
-                   ),
-                   Expanded(child: Divider()),
+
+                const SizedBox(height: 60),
+
+                // Name field (registration only)
+                if (_isRegistering) ...[
+                  TextField(
+                    controller: _nameController,
+                    style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
+                    decoration: InputDecoration(
+                      labelText: 'HUNTER NAME',
+                      labelStyle: GoogleFonts.jetBrainsMono(
+                        color: AppColors.textSecondary,
+                        letterSpacing: 2,
+                      ),
+                      prefixIcon: const Icon(Icons.person_outline, color: AppColors.bloodRed),
+                      filled: true,
+                      fillColor: AppColors.fogGrey,
+                      border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(color: AppColors.textMuted.withOpacity(0.3)),
+                      ),
+                      focusedBorder: const OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(color: AppColors.bloodRed, width: 2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                 ],
-              ),
-              const SizedBox(height: 24),
-              
-              ElevatedButton.icon(
-                onPressed: _isLoading ? null : _handleGoogleSignIn,
-                icon: const Icon(Icons.g_mobiledata, size: 28), // Using standard icon as placeholder
-                label: const Text('Sign in with Google'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
+
+                // Email field
+                TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
+                  decoration: InputDecoration(
+                    labelText: 'EMAIL',
+                    labelStyle: GoogleFonts.jetBrainsMono(
+                      color: AppColors.textSecondary,
+                      letterSpacing: 2,
+                    ),
+                    prefixIcon: const Icon(Icons.email_outlined, color: AppColors.bloodRed),
+                    filled: true,
+                    fillColor: AppColors.fogGrey,
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(color: AppColors.textMuted.withOpacity(0.3)),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(color: AppColors.bloodRed, width: 2),
+                    ),
+                  ),
                 ),
-              ),
-              // Apple would go here
-            ],
+                const SizedBox(height: 16),
+
+                // Password field
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
+                  decoration: InputDecoration(
+                    labelText: 'PASSWORD',
+                    labelStyle: GoogleFonts.jetBrainsMono(
+                      color: AppColors.textSecondary,
+                      letterSpacing: 2,
+                    ),
+                    prefixIcon: const Icon(Icons.lock_outline, color: AppColors.bloodRed),
+                    filled: true,
+                    fillColor: AppColors.fogGrey,
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(color: AppColors.textMuted.withOpacity(0.3)),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(color: AppColors.bloodRed, width: 2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Primary action button with glow
+                Container(
+                  decoration: BoxDecoration(
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.bloodRed.withOpacity(0.4),
+                        blurRadius: 20,
+                        spreadRadius: -5,
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _handleEmailAuth,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.bloodRed,
+                      foregroundColor: AppColors.ghostWhite,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.ghostWhite,
+                            ),
+                          )
+                        : Text(
+                            _isRegistering ? 'JOIN THE HUNT' : 'ENTER',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 4,
+                            ),
+                          ),
+                  ),
+                ),
+
+                // Toggle registration
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _isRegistering = !_isRegistering;
+                    });
+                  },
+                  child: Text(
+                    _isRegistering
+                        ? 'Already a hunter? Sign In'
+                        : 'New prey? Create account',
+                    style: GoogleFonts.jetBrainsMono(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Divider
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: AppColors.textMuted.withOpacity(0.3))),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'OR',
+                        style: GoogleFonts.jetBrainsMono(
+                          color: AppColors.textMuted,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: AppColors.textMuted.withOpacity(0.3))),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Google sign in button
+                OutlinedButton.icon(
+                  onPressed: _isLoading ? null : _handleGoogleSignIn,
+                  icon: const Icon(Icons.g_mobiledata, size: 28),
+                  label: Text(
+                    'SIGN IN WITH GOOGLE',
+                    style: GoogleFonts.jetBrainsMono(
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.ghostWhite,
+                    side: const BorderSide(color: AppColors.ghostWhite),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

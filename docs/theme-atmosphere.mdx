@@ -1,0 +1,110 @@
+---
+title: "Theme & Atmosphere"
+description: "Visual and audio design guidelines for the horror/thriller experience"
+---
+
+## Core Aesthetic: "The Unseen Pursuit"
+
+The game's atmosphere is built on **tension, paranoia, and the fear of being caught**. Unlike standard fitness apps that are bright and encouraging, Chaser is dark, gritty, and intense.
+
+**Key Emotions:**
+- **Urgency**: "I need to move *now*."
+- **Paranoia**: "Is the chaser getting closer?"
+- **Relief**: "I escaped... for now."
+
+---
+
+## Visual Design
+
+### Color Palette
+
+The interface uses a "Dark Mode" baseline with high-contrast signal colors.
+
+| Color | Hex | Usage |
+|-------|-----|-------|
+| **Void Black** | `#0a0a0a` | Main background |
+| **Fog Grey** | `#1a1a1a` | Cards / secondary backgrounds |
+| **Blood Red** | `#ff3b30` | **Chaser**, Alerts, Danger warnings |
+| **Pulse Blue** | `#32aadf` | **Runner**, Safety, Progress |
+| **Ghost White** | `#e0e0e0` | Primary Text |
+| **Toxic Green** | `#2ecc71` | Stamina / Boost Items |
+| **Warning Yellow** | `#f1c40f` | Close Call indicators |
+
+### UI Elements
+
+*   **Fonts**: 
+    *   *Headers*: **'Creepster'** or **'Nosifer'** (Google Fonts) for game titles and "CAPTURED" events.
+    *   *Body*: **'Roboto Mono'** or **'JetBrains Mono'** for a tactical, survival-gear feel.
+*   **Buttons**: Sharp edges, slight glow effects (neon), glitched text animations on press.
+*   **Vignette**: Permanent dark vignette on screen edges to create a claustrophobic feel.
+
+---
+
+## Audio Design
+
+Sound is the primary driver of tension when the phone is in a pocket.
+
+### 1. The Heartbeat System
+The background audio loops a heartbeat sound that adapts to the **proximity of the Chaser**.
+
+- **Safe Zone (>2km)**: Silence or faint wind/ambience.
+- **Caution Zone (1km - 2km)**: Slow, steady heartbeat (60 BPM).
+- **Danger Zone (500m - 1km)**: Elevated heartbeat (100 BPM), slightly louder.
+- **Critical Zone (<500m)**: Rapid, pounding heartbeat (160 BPM), "Whoosh" effects.
+
+### 2. Sound Effects (SFX)
+- **Notification**: Sharp, jarring sounds (like a metal gate slamming or a violin screech) instead of pleasant chimes.
+- **Capture**: A loud "Jumpscare" sound effect (slam + scream or sudden bass drop).
+- **Item Use**:
+    *   *Trip*: Breaking bone or snapping twig sound.
+    *   *Boost*: Adrenaline injection hiss.
+
+---
+
+## Visual FX Implementation
+
+### The "Glitch" Effect
+When the Chaser gets close (<500m), the UI should start to visually degrade.
+
+```dart
+// lib/widgets/visuals/glitch_effect.dart
+class GlitchEffect extends StatelessWidget {
+  final Widget child;
+  final double intensity; // 0.0 to 1.0 based on proximity
+
+  // Implementation would use a shader (FragmentProgram)
+  // to displace pixels horizontally and separate RGB channels
+}
+```
+
+### The "Blood Overlay"
+When a runner is captured, the screen doesn't just show a dialog; it cracks or gets covered in a red overlay.
+
+---
+
+## Haptic Feedback
+
+Use vibration patterns to signal danger without looking at the screen.
+
+- **Chaser Moved**: Short, sharp vibration.
+- **Close Call**: Double heartbeat vibration pattern.
+- **Captured**: Long, continuous intense vibration.
+
+---
+
+## Narrative Tone
+
+All copy should be threatening and direct.
+
+| Standard App | Chaser (Horror Theme) |
+|--------------|----------------------|
+| "Game Started!" | "The Hunt Begins." |
+| "You joined the session." | "You have entered the kill zone." |
+| "5000 steps remaining." | "Don't stop running." |
+| "Game Over" | "No Survivors." |
+
+---
+
+## Next Steps
+- Update [Race Track Visualization](/chaser/race-track-visualization) to match dark theme.
+- Update [Notifications](/chaser/notifications) with new copy.

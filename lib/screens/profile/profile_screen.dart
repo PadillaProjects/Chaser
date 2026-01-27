@@ -1,12 +1,13 @@
+import 'package:chaser/config/colors.dart';
 import 'package:chaser/config/routes.dart';
-import 'package:chaser/models/player_profile.dart'; // New Import
+import 'package:chaser/models/player_profile.dart';
 import 'package:chaser/models/user_profile.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-// Existing UserProfile Provider
 final userProfileStreamProvider = StreamProvider.autoDispose<UserProfile?>((ref) {
   final authUser = ref.watch(authStateProvider).value;
   if (authUser == null) return Stream.value(null);
@@ -21,7 +22,6 @@ final userProfileStreamProvider = StreamProvider.autoDispose<UserProfile?>((ref)
   });
 });
 
-// New PlayerProfile Provider
 final playerProfileStreamProvider = StreamProvider.autoDispose<PlayerProfile?>((ref) {
   final authUser = ref.watch(authStateProvider).value;
   if (authUser == null) return Stream.value(null);
@@ -96,23 +96,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: Text(
+          'HUNTER PROFILE',
+          style: GoogleFonts.creepster(
+            fontSize: 24,
+            letterSpacing: 2,
+            color: AppColors.ghostWhite,
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.logout, color: AppColors.bloodRed),
             onPressed: () {
                ref.read(authServiceProvider).signOut();
             },
-            tooltip: 'Sign Out',
+            tooltip: 'Flee',
           ),
         ],
       ),
       body: userProfileAsync.when(
         data: (userProfile) {
           if (userProfile == null) {
-            return const Center(child: Text('User profile not found.'));
+            return Center(
+              child: Text(
+                'Hunter profile not found.',
+                style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary),
+              ),
+            );
           }
-          
+
           if (!_isEditing && _nameController.text.isEmpty) {
              _nameController.text = userProfile.displayName;
           }
@@ -122,26 +134,57 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const CircleAvatar(
-                  radius: 50,
-                  child: Icon(Icons.person, size: 50),
+                // Avatar
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.bloodRed, width: 3),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.bloodRed.withOpacity(0.4),
+                        blurRadius: 20,
+                        spreadRadius: -5,
+                      ),
+                    ],
+                  ),
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundColor: AppColors.fogGrey,
+                    child: Icon(
+                      Icons.person,
+                      size: 50,
+                      color: AppColors.bloodRed,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
+
+                // Name
                 _isEditing
                     ? Row(
                         children: [
                           Expanded(
                             child: TextField(
                               controller: _nameController,
-                              decoration: const InputDecoration(labelText: 'Display Name'),
+                              style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
+                              decoration: InputDecoration(
+                                labelText: 'HUNTER NAME',
+                                labelStyle: GoogleFonts.jetBrainsMono(
+                                  color: AppColors.textSecondary,
+                                  letterSpacing: 2,
+                                ),
+                                filled: true,
+                                fillColor: AppColors.fogGrey,
+                                border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+                              ),
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.save),
+                            icon: const Icon(Icons.check, color: AppColors.toxicGreen),
                             onPressed: () => _updateName(userProfile.displayName),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.cancel),
+                            icon: const Icon(Icons.close, color: AppColors.bloodRed),
                             onPressed: () {
                               setState(() {
                                 _isEditing = false;
@@ -155,11 +198,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            userProfile.displayName,
-                            style: Theme.of(context).textTheme.headlineSmall,
+                            userProfile.displayName.toUpperCase(),
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.ghostWhite,
+                              letterSpacing: 2,
+                            ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.edit, size: 20),
+                            icon: const Icon(Icons.edit, size: 18, color: AppColors.textSecondary),
                             onPressed: () {
                               setState(() {
                                 _isEditing = true;
@@ -169,18 +217,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ),
                         ],
                       ),
+
                 Text(
                   userProfile.email,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey,
-                      ),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                  ),
                 ),
                 const SizedBox(height: 32),
-                const SizedBox(height: 24),
-                // Level & XP
+
+                // Level & XP Section
                 playerProfileAsync.when(
                   data: (playerProfileData) {
-                    // Default profile if null
                     final playerProfile = playerProfileData ?? PlayerProfile(
                         userId: userProfile.uid,
                         level: 1,
@@ -190,48 +239,92 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         totalGamesPlayed: 0,
                         createdAt: DateTime.now(),
                     );
-                    
-                    return Column(
-                      children: [
-                        Text('Level ${playerProfile.level}', style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: Theme.of(context).primaryColor,
-                          fontWeight: FontWeight.bold,
-                        )),
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
-                          child: LinearProgressIndicator(
-                            value: playerProfile.currentLevelProgress, 
-                            minHeight: 12,
-                            borderRadius: BorderRadius.circular(6),
+
+                    return Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: AppColors.fogGrey,
+                        border: Border.all(color: AppColors.pulseBlue.withOpacity(0.5)),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            'LEVEL ${playerProfile.level}',
+                            style: GoogleFonts.creepster(
+                              fontSize: 32,
+                              color: AppColors.pulseBlue,
+                              letterSpacing: 4,
+                              shadows: [
+                                Shadow(
+                                  color: AppColors.pulseBlue.withOpacity(0.5),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${playerProfile.xpSinceCurrentLevelStart} / ${playerProfile.xpRequiredForNextLevel} XP',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
+                          const SizedBox(height: 16),
+                          Container(
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: AppColors.voidBlack,
+                              border: Border.all(color: AppColors.pulseBlue.withOpacity(0.5)),
+                            ),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: playerProfile.currentLevelProgress,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: AppColors.pulseBlue,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.pulseBlue.withOpacity(0.5),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${playerProfile.xpSinceCurrentLevelStart} / ${playerProfile.xpRequiredForNextLevel} XP',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
                     );
-                  }, 
-                  loading: () => const SizedBox(height: 50),
+                  },
+                  loading: () => const SizedBox(height: 100),
                   error: (_,__) => const SizedBox.shrink(),
                 ),
+
                 const SizedBox(height: 24),
-                const Divider(),
-                const SizedBox(height: 16),
-                Text(
-                  'Statistics',
-                  style: Theme.of(context).textTheme.titleLarge,
+
+                // Stats Header
+                Row(
+                  children: [
+                    Container(width: 4, height: 20, color: AppColors.bloodRed),
+                    const SizedBox(width: 8),
+                    Text(
+                      'KILL STATISTICS',
+                      style: GoogleFonts.creepster(
+                        fontSize: 20,
+                        color: AppColors.ghostWhite,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
-                
-                // Stats Display
+
+                // Stats Grid
                 playerProfileAsync.when(
                   data: (playerProfileData) {
-                    // Default profile if null
                     final playerProfile = playerProfileData ?? PlayerProfile(
-                        userId: userProfile.uid, // Use auth uid
+                        userId: userProfile.uid,
                         level: 1,
                         totalXP: 0,
                         totalCoins: 0,
@@ -239,58 +332,84 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         totalGamesPlayed: 0,
                         createdAt: DateTime.now(),
                     );
-                    
+
                      return GridView.count(
                       crossAxisCount: 2,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
                       childAspectRatio: 1.5,
                       children: [
-                        _buildStatCard('Total Games', '${playerProfile.totalGamesPlayed}', Icons.games),
-                        _buildStatCard('Wins', '${playerProfile.totalWins}', Icons.emoji_events),
-                        _buildStatCard('Captures', '${playerProfile.totalCaptures}', Icons.handshake),
-                         _buildStatCard('Escapes', '${playerProfile.totalEscapes}', Icons.run_circle_outlined),
-                        _buildStatCard('Distance', '${playerProfile.totalDistance.toStringAsFixed(1)} m', Icons.directions_run),
-                        _buildStatCard('Coins', '${playerProfile.totalCoins}', Icons.monetization_on),
+                        _buildStatCard('HUNTS', '${playerProfile.totalGamesPlayed}', Icons.track_changes, AppColors.bloodRed),
+                        _buildStatCard('VICTORIES', '${playerProfile.totalWins}', Icons.emoji_events, AppColors.warningYellow),
+                        _buildStatCard('CAPTURES', '${playerProfile.totalCaptures}', Icons.gps_fixed, AppColors.bloodRed),
+                        _buildStatCard('ESCAPES', '${playerProfile.totalEscapes}', Icons.directions_run, AppColors.pulseBlue),
+                        _buildStatCard('DISTANCE', '${playerProfile.totalDistance.toStringAsFixed(0)}m', Icons.explore, AppColors.toxicGreen),
+                        _buildStatCard('BOUNTY', '${playerProfile.totalCoins}', Icons.toll, AppColors.warningYellow),
                       ],
                     );
                   },
-                  loading: () => const Center(child: CircularProgressIndicator()),
-                  error: (e, s) => Center(child: Text('Error loading stats: $e')),
+                  loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
+                  error: (e, s) => Center(
+                    child: Text(
+                      'Error loading stats: $e',
+                      style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed),
+                    ),
+                  ),
                 )
               ],
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
+        error: (err, stack) => Center(
+          child: Text(
+            'Error: $err',
+            style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 28, color: Theme.of(context).primaryColor),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.bodySmall,
-              textAlign: TextAlign.center,
-            ),
-          ],
+  Widget _buildStatCard(String title, String value, IconData icon, Color accentColor) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.fogGrey,
+        border: Border(
+          left: BorderSide(color: accentColor, width: 3),
         ),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: accentColor),
+              const Spacer(),
+              Text(
+                value,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.ghostWhite,
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          Text(
+            title,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 10,
+              color: AppColors.textSecondary,
+              letterSpacing: 2,
+            ),
+          ),
+        ],
       ),
     );
   }

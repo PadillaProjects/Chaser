@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'package:chaser/config/colors.dart';
 import 'package:chaser/models/player.dart';
-import 'package:chaser/models/player_profile.dart'; // Added
+import 'package:chaser/models/player_profile.dart';
 import 'package:chaser/models/session.dart';
 import 'package:chaser/screens/session/edit_session_sheet.dart';
 import 'package:chaser/services/pedometer_service.dart';
@@ -9,10 +10,10 @@ import 'package:chaser/services/firebase/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:chaser/models/user_profile.dart'; 
+import 'package:chaser/models/user_profile.dart';
 import 'package:go_router/go_router.dart';
 import 'package:chaser/screens/session/game_results_view.dart';
-
+import 'package:google_fonts/google_fonts.dart';
 
 final sessionStreamProvider = StreamProvider.family((ref, String sessionId) {
   return FirestoreService().watchSession(sessionId);
@@ -52,24 +53,23 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
   final _firestoreService = FirestoreService();
   bool _showResults = true;
 
-
   Future<void> _pickScheduledTime(Timestamp? currentScheduledTime) async {
     final now = DateTime.now();
     final current = currentScheduledTime?.toDate() ?? now;
-    
+
     final date = await showDatePicker(
       context: context,
       initialDate: current,
       firstDate: now,
       lastDate: now.add(const Duration(days: 365)),
     );
-    
+
     if (date != null && mounted) {
       final time = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.fromDateTime(current),
       );
-      
+
       if (time != null) {
         final newDateTime = DateTime(
           date.year, date.month, date.day, time.hour, time.minute
@@ -92,11 +92,29 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Leave Game?'),
-        content: const Text('Are you sure you want to leave?'),
+        backgroundColor: AppColors.fogGrey,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: Text(
+          'FLEE THE ZONE?',
+          style: GoogleFonts.creepster(fontSize: 24, color: AppColors.ghostWhite),
+        ),
+        content: Text(
+          'Are you sure you want to abandon the hunt?',
+          style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Leave')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('STAY', style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary)),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.bloodRed,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            child: Text('FLEE', style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold)),
+          ),
         ],
       ),
     );
@@ -124,28 +142,32 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Game Lobby'),
+        title: Text(
+          'THE KILL ZONE',
+          style: GoogleFonts.creepster(fontSize: 24, letterSpacing: 2, color: AppColors.ghostWhite),
+        ),
         actions: [
           sessionAsync.when(
             data: (session) {
               final isOwner = session.ownerId == currentUser?.uid;
-              
+
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (session.status == 'pending')
                     IconButton(
-                      icon: const Icon(Icons.exit_to_app, color: Colors.red),
-                      tooltip: 'Leave Game',
+                      icon: const Icon(Icons.exit_to_app, color: AppColors.bloodRed),
+                      tooltip: 'Flee the Zone',
                       onPressed: _leaveSession,
                     ),
                   if (isOwner && session.status == 'pending')
                     IconButton(
-                      icon: const Icon(Icons.settings),
+                      icon: const Icon(Icons.settings, color: AppColors.textSecondary),
                       onPressed: () {
                         showModalBottomSheet(
                           context: context,
                           isScrollControlled: true,
+                          backgroundColor: AppColors.fogGrey,
                           builder: (context) => EditSessionSheet(session: session),
                         );
                       },
@@ -159,8 +181,10 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
         ],
       ),
       body: sessionAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
+        error: (err, stack) => Center(
+          child: Text('Error: $err', style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed)),
+        ),
         data: (session) {
           if (session.status == 'completed' && _showResults && session.results != null) {
               return GameResultsView(
@@ -171,132 +195,190 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
           }
 
           return Column(
-
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Header
               Container(
                 padding: const EdgeInsets.all(24),
-                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                color: AppColors.fogGrey,
                 child: Column(
                   children: [
                     Text(
-                      session.name,
-                      style: Theme.of(context).textTheme.headlineMedium,
+                      session.name.toUpperCase(),
+                      style: GoogleFonts.creepster(
+                        fontSize: 28,
+                        color: AppColors.ghostWhite,
+                        letterSpacing: 2,
+                      ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
                       children: [
-                        Chip(
-                          label: Text(session.status.toUpperCase()),
-                          backgroundColor: session.status == 'active' 
-                              ? Colors.green[100] 
-                              : Colors.orange[100],
-                        ),
+                        _buildStatusChip(session.status),
                         if (session.status == 'active' && _isheadstartActive(session))
-                             Chip(
-                                avatar: const Icon(Icons.timer, size: 16),
-                                label: _HeadstartTimer(
-                                    endTime: (session.actualStartTime?.toDate() ?? 
-                                             session.scheduledStartTime?.toDate() ?? 
-                                             DateTime.now())
-                                            .add(Duration(minutes: session.headstartDuration)),
+                             Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                color: AppColors.warningYellow.withOpacity(0.2),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.timer, size: 16, color: AppColors.warningYellow),
+                                    const SizedBox(width: 4),
+                                    _HeadstartTimer(
+                                        endTime: (session.actualStartTime?.toDate() ??
+                                                 session.scheduledStartTime?.toDate() ??
+                                                 DateTime.now())
+                                                .add(Duration(minutes: session.headstartDuration)),
+                                    ),
+                                  ],
                                 ),
-                                backgroundColor: Colors.amber[100],
                             ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text('${session.gameMode} • ${session.durationDays} Days • ${session.visibility.toUpperCase()}'),
+                    const SizedBox(height: 12),
+                    Text(
+                      '${session.gameMode.toUpperCase()} • ${session.durationDays} DAYS',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        letterSpacing: 2,
+                      ),
+                    ),
                     if (session.status == 'pending' && session.joinCode != null) ...[
-                       const SizedBox(height: 12),
+                       const SizedBox(height: 16),
                        Container(
-                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                          decoration: BoxDecoration(
-                           color: Theme.of(context).colorScheme.primary,
-                           borderRadius: BorderRadius.circular(16),
+                           color: AppColors.voidBlack,
+                           border: Border.all(color: AppColors.bloodRed, width: 2),
+                           boxShadow: [
+                             BoxShadow(
+                               color: AppColors.bloodRed.withOpacity(0.3),
+                               blurRadius: 10,
+                             ),
+                           ],
                          ),
                          child: Row(
                            mainAxisSize: MainAxisSize.min,
                            children: [
-                             const Text('CODE: ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                             Text(session.joinCode!, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                             Text(
+                               'CODE: ',
+                               style: GoogleFonts.jetBrainsMono(
+                                 color: AppColors.textSecondary,
+                                 fontWeight: FontWeight.bold,
+                               ),
+                             ),
+                             Text(
+                               session.joinCode!,
+                               style: GoogleFonts.jetBrainsMono(
+                                 color: AppColors.bloodRed,
+                                 fontSize: 24,
+                                 fontWeight: FontWeight.bold,
+                                 letterSpacing: 4,
+                               ),
+                             ),
                            ],
                          ),
                        ),
                     ],
                      const SizedBox(height: 8),
-                    Text('${session.memberCount} / ${session.maxMembers} Players'),
+                    Text(
+                      '${session.memberCount} / ${session.maxMembers} PREY',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              
-              const Divider(height: 1),
+
+              const Divider(height: 1, color: AppColors.textMuted),
 
               // Game Rules Summary
               ExpansionTile(
-                title: const Text('Game Rules'),
-                leading: const Icon(Icons.info_outline),
+                title: Text(
+                  'HUNT RULES',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.ghostWhite,
+                    letterSpacing: 2,
+                  ),
+                ),
+                leading: const Icon(Icons.info_outline, color: AppColors.bloodRed),
+                collapsedIconColor: AppColors.textSecondary,
+                iconColor: AppColors.bloodRed,
                 children: [
                    ListTile(
                     dense: true,
-                    title: Text('Headstart: ${session.headstartDistance}m (${session.headstartDuration} min)'),
-                    leading: const Icon(Icons.run_circle_outlined),
+                    title: Text(
+                      'Headstart: ${session.headstartDistance}m (${session.headstartDuration} min)',
+                      style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
+                    ),
+                    leading: const Icon(Icons.run_circle_outlined, color: AppColors.pulseBlue, size: 20),
                   ),
                   if (session.restStartHour != session.restEndHour)
                     ListTile(
                       dense: true,
-                      title: Text('Rest Hours: ${session.restStartHour}:00 - ${session.restEndHour}:00'),
-                      leading: const Icon(Icons.bedtime_outlined),
+                      title: Text(
+                        'Rest Hours: ${session.restStartHour}:00 - ${session.restEndHour}:00',
+                        style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
+                      ),
+                      leading: const Icon(Icons.bedtime_outlined, color: AppColors.textSecondary, size: 20),
                     ),
                   ListTile(
                     dense: true,
-                    title: Text('Capture: ${session.instantCapture ? "Instant" : "Resist ${session.captureResistanceDuration}min"}'),
-                    leading: const Icon(Icons.touch_app_outlined),
+                    title: Text(
+                      'Capture: ${session.instantCapture ? "Instant Kill" : "Resist ${session.captureResistanceDuration}min"}',
+                      style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
+                    ),
+                    leading: const Icon(Icons.touch_app_outlined, color: AppColors.bloodRed, size: 20),
                   ),
                   if (session.gameMode == 'target')
                     ListTile(
                       dense: true,
-                      title: Text('Switch Cooldown: ${session.switchCooldown} min'),
-                      leading: const Icon(Icons.swap_horiz),
-                    ),
-                  if (session.visibility == 'private' && session.password != null)
-                     const ListTile(
-                      dense: true,
-                      title: Text('Password Protected'),
-                      leading: Icon(Icons.lock),
+                      title: Text(
+                        'Switch Cooldown: ${session.switchCooldown} min',
+                        style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
+                      ),
+                      leading: const Icon(Icons.swap_horiz, color: AppColors.warningYellow, size: 20),
                     ),
                 ],
               ),
-              const Divider(height: 1),
-              
+              const Divider(height: 1, color: AppColors.textMuted),
+
               // Players List
               Expanded(
                 child: playersAsync.when(
-                  loading: () => const Center(child: CircularProgressIndicator()),
-                  error: (e,s) => Center(child: Text('Error loading players: $e')),
+                  loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
+                  error: (e,s) => Center(
+                    child: Text('Error loading players: $e', style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed)),
+                  ),
                   data: (players) {
-                    if (players.isEmpty) return const Center(child: Text('No players yet'));
-                    
+                    if (players.isEmpty) {
+                      return Center(
+                        child: Text(
+                          'No prey yet...',
+                          style: GoogleFonts.jetBrainsMono(color: AppColors.textMuted, fontStyle: FontStyle.italic),
+                        ),
+                      );
+                    }
+
                     final myPlayer = players.where((p) => p.userId == currentUser?.uid).firstOrNull;
                     final showCaptureWarning = myPlayer?.captureState == 'being_chased' && myPlayer?.captureDeadline != null;
 
-                    // Check if I am a chaser and any runner is being chased
                     final isChaser = myPlayer?.role == 'chaser';
                     final victims = players.where((p) => p.role == 'runner' && p.captureState == 'being_chased' && p.captureDeadline != null).toList();
                     final showChaserStatus = isChaser && victims.isNotEmpty;
 
                     return Stack(
                       children: [
-                        // Game Loop Monitor: Runs logic for everyone if needed
                         _GameLoopMonitor(
                           sessionId: widget.sessionId,
                           players: players,
                         ),
-                        // Distance Monitor: Tracks distance for current user
-                        if (session.status == 'active' && 
-                            // Only track if game has started
+                        if (session.status == 'active' &&
                             (session.actualStartTime != null || session.scheduledStartTime != null))
                           _DistanceMonitor(
                             sessionId: widget.sessionId,
@@ -306,32 +388,10 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                           ),
                         Column(
                           children: [
-                            if (showCaptureWarning) 
-
-                              Container(
-                                color: Colors.red.withOpacity(0.1),
-                                padding: const EdgeInsets.all(12),
-                                margin: const EdgeInsets.only(bottom: 8),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 32),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Text('Capture Imminent!', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                                          const Text('Escape by increasing your distance!', style: TextStyle(fontSize: 12)),
-                                          const SizedBox(height: 4),
-                                          _CaptureTimer(
-                                              endTime: myPlayer!.captureDeadline!.toDate(),
-                                              onExpired: () => FirestoreService().triggerCaptureCheck(widget.sessionId),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                            if (showCaptureWarning)
+                              _CaptureWarningPanel(
+                                player: myPlayer!,
+                                sessionId: widget.sessionId,
                               ),
                              if (showChaserStatus)
                                _ChaserCaptureStatus(
@@ -360,103 +420,9 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                   },
                 ),
               ),
-              
-              if (session.ownerId == currentUser?.uid && session.status == 'active') ...[
-                 Padding(
-                   padding: const EdgeInsets.all(16.0),
-                   child: ElevatedButton.icon(
-                     onPressed: () => _stopGame(session.id),
-                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                     icon: const Icon(Icons.stop),
-                     label: const Text('Stop Game'),
-                   ),
-                 )
-              ] else if (session.ownerId == currentUser?.uid && session.status == 'pending') ...[
-                 Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Schedule option
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Schedule Start'),
-                        subtitle: Text(session.scheduledStartTime == null 
-                            ? 'Not scheduled' 
-                            : 'Scheduled for: ${session.scheduledStartTime!.toDate().toString().split('.')[0]}'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (session.scheduledStartTime != null)
-                              IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: _clearScheduledTime,
-                              ),
-                            IconButton(
-                              icon: const Icon(Icons.calendar_month),
-                              onPressed: () => _pickScheduledTime(session.scheduledStartTime),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ElevatedButton(
-                        onPressed: () => _startGame(session),
-                        child: const Text('Start Game Now'),
-                      ),
-                    ],
-                  ),
-                )
-              ] else if (session.ownerId == currentUser?.uid && session.status == 'completed') ...[
-                  Padding(
-                   padding: const EdgeInsets.all(16.0),
-                   child: Column(
-                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                       children: [
-                           ElevatedButton.icon(
-                             onPressed: () => _resetGame(session.id),
-                             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-                             icon: const Icon(Icons.refresh),
-                             label: const Text('Reset Game'),
-                           ),
-                           const SizedBox(height: 8),
-                           OutlinedButton(
-                                onPressed: () => setState(() => _showResults = true),
-                                child: const Text('View Results'),
-                            ),
-                       ],
-                   ),
-                 )
 
-              ] else if (session.status == 'completed') ...[
-                 Padding(
-                   padding: const EdgeInsets.all(16.0),
-                   child: Center(
-                     child: Column(
-                        children: [
-                            const Text('Game Completed', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                            const SizedBox(height: 8),
-                            ElevatedButton(
-                                onPressed: () => setState(() => _showResults = true),
-                                child: const Text('View Results'),
-                            ),
-                        ],
-                     ),
-                   ),
-                 ),
-              ] else 
-                Padding(
-
-                  padding: const EdgeInsets.all(16.0),
-                  child: Center(
-                    child: Text(
-                      session.status == 'active' ? 'Game in progress' : 
-                      session.status == 'completed' ? 'Game Completed' :
-                      'Waiting for host to start...',
-                      style: const TextStyle(fontStyle: FontStyle.italic),
-                    ),
-                  ),
-                ),
+              // Action Buttons
+              _buildActionButtons(session, currentUser?.uid),
             ],
           );
         },
@@ -464,12 +430,224 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
     );
   }
 
+  Widget _buildStatusChip(String status) {
+    Color bgColor;
+    Color textColor;
+    String label;
+
+    switch (status) {
+      case 'pending':
+        bgColor = AppColors.warningYellow.withOpacity(0.2);
+        textColor = AppColors.warningYellow;
+        label = 'AWAITING PREY';
+        break;
+      case 'active':
+        bgColor = AppColors.bloodRed.withOpacity(0.2);
+        textColor = AppColors.bloodRed;
+        label = 'HUNT ACTIVE';
+        break;
+      case 'completed':
+        bgColor = AppColors.textMuted.withOpacity(0.2);
+        textColor = AppColors.textSecondary;
+        label = 'HUNT ENDED';
+        break;
+      default:
+        bgColor = AppColors.fogGrey;
+        textColor = AppColors.textSecondary;
+        label = status.toUpperCase();
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      color: bgColor,
+      child: Text(
+        label,
+        style: GoogleFonts.jetBrainsMono(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: textColor,
+          letterSpacing: 2,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(SessionModel session, String? currentUserId) {
+    final isOwner = session.ownerId == currentUserId;
+
+    if (isOwner && session.status == 'active') {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Container(
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.warningYellow.withOpacity(0.3),
+                blurRadius: 15,
+              ),
+            ],
+          ),
+          child: ElevatedButton.icon(
+            onPressed: () => _stopGame(session.id),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.warningYellow,
+              foregroundColor: AppColors.voidBlack,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            icon: const Icon(Icons.stop),
+            label: Text(
+              'END THE HUNT',
+              style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, letterSpacing: 2),
+            ),
+          ),
+        ),
+      );
+    } else if (isOwner && session.status == 'pending') {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                'SCHEDULE HUNT',
+                style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite, letterSpacing: 2),
+              ),
+              subtitle: Text(
+                session.scheduledStartTime == null
+                    ? 'Not scheduled'
+                    : 'Scheduled: ${session.scheduledStartTime!.toDate().toString().split('.')[0]}',
+                style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (session.scheduledStartTime != null)
+                    IconButton(
+                      icon: const Icon(Icons.clear, color: AppColors.bloodRed),
+                      onPressed: _clearScheduledTime,
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.calendar_month, color: AppColors.pulseBlue),
+                    onPressed: () => _pickScheduledTime(session.scheduledStartTime),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.bloodRed.withOpacity(0.4),
+                    blurRadius: 20,
+                  ),
+                ],
+              ),
+              child: ElevatedButton(
+                onPressed: () => _startGame(session),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.bloodRed,
+                  foregroundColor: AppColors.ghostWhite,
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                ),
+                child: Text(
+                  'RELEASE THE CHASER',
+                  style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, letterSpacing: 2),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (isOwner && session.status == 'completed') {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ElevatedButton.icon(
+              onPressed: () => _resetGame(session.id),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.warningYellow,
+                foregroundColor: AppColors.voidBlack,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              ),
+              icon: const Icon(Icons.refresh),
+              label: Text(
+                'RESET HUNT',
+                style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, letterSpacing: 2),
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => setState(() => _showResults = true),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.ghostWhite,
+                side: const BorderSide(color: AppColors.ghostWhite),
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              ),
+              child: Text(
+                'VIEW RESULTS',
+                style: GoogleFonts.jetBrainsMono(letterSpacing: 2),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (session.status == 'completed') {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Column(
+            children: [
+              Text(
+                'THE HUNT HAS ENDED',
+                style: GoogleFonts.creepster(fontSize: 20, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () => setState(() => _showResults = true),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.ghostWhite,
+                  side: const BorderSide(color: AppColors.ghostWhite),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                ),
+                child: Text(
+                  'VIEW RESULTS',
+                  style: GoogleFonts.jetBrainsMono(letterSpacing: 2),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Text(
+            session.status == 'active' ? 'The hunt is on...' : 'The Hunter prepares...',
+            style: GoogleFonts.jetBrainsMono(color: AppColors.textMuted, fontStyle: FontStyle.italic),
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _startGame(SessionModel session) async {
     try {
       await _firestoreService.startGame(widget.sessionId, session);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Game Started!')),
+          SnackBar(
+            content: Text(
+              'The Hunt Begins.',
+              style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
+            ),
+            backgroundColor: AppColors.bloodRed,
+          ),
         );
       }
     } catch (e) {
@@ -485,14 +663,29 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Stop Game?'),
-        content: const Text('Are you sure you want to stop this game? This will calculate results and end the session.'),
+        backgroundColor: AppColors.fogGrey,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: Text(
+          'END THE HUNT?',
+          style: GoogleFonts.creepster(fontSize: 24, color: AppColors.ghostWhite),
+        ),
+        content: Text(
+          'This will calculate results and end the session.',
+          style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('CONTINUE', style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary)),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Stop Game'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.warningYellow,
+              foregroundColor: AppColors.voidBlack,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            child: Text('END HUNT', style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -503,7 +696,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
             await _firestoreService.stopGame(sessionId);
              if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Game Stopped!')),
+                  const SnackBar(content: Text('Hunt Ended.')),
                 );
               }
         } catch(e) {
@@ -520,25 +713,40 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
       final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reset Game?'),
-        content: const Text('This will reset the game to pending state. All players will remain in the lobby.'),
+        backgroundColor: AppColors.fogGrey,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: Text(
+          'RESET HUNT?',
+          style: GoogleFonts.creepster(fontSize: 24, color: AppColors.ghostWhite),
+        ),
+        content: Text(
+          'This will reset the game to pending state.',
+          style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('CANCEL', style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary)),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-            child: const Text('Reset'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.warningYellow,
+              foregroundColor: AppColors.voidBlack,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            child: Text('RESET', style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
-    
+
     if (confirmed == true) {
          try {
             await _firestoreService.resetGame(sessionId);
              if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Game Reset!')),
+                  const SnackBar(content: Text('Hunt Reset.')),
                 );
               }
         } catch(e) {
@@ -553,12 +761,61 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
 
   bool _isheadstartActive(SessionModel session) {
     if (session.headstartDuration <= 0) return false;
-    // Prefer actualStartTime if game started, fall back to scheduled if just checking preview (though this method is mostly for active state)
     final start = session.actualStartTime?.toDate() ?? session.scheduledStartTime?.toDate();
     if (start == null) return false;
-    
+
     final end = start.add(Duration(minutes: session.headstartDuration));
     return DateTime.now().isBefore(end);
+  }
+}
+
+class _CaptureWarningPanel extends StatelessWidget {
+  final PlayerModel player;
+  final String sessionId;
+
+  const _CaptureWarningPanel({required this.player, required this.sessionId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.bloodRed.withOpacity(0.15),
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            color: AppColors.bloodRed.withOpacity(0.3),
+            child: const Icon(Icons.warning_amber_rounded, color: AppColors.bloodRed, size: 32),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'CAPTURE IMMINENT',
+                  style: GoogleFonts.creepster(
+                    color: AppColors.bloodRed,
+                    fontSize: 18,
+                    letterSpacing: 2,
+                  ),
+                ),
+                Text(
+                  'Escape by increasing your distance!',
+                  style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
+                ),
+                const SizedBox(height: 8),
+                _CaptureTimer(
+                    endTime: player.captureDeadline!.toDate(),
+                    onExpired: () => FirestoreService().triggerCaptureCheck(sessionId),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -585,44 +842,90 @@ class SessionPlayerTile extends ConsumerWidget {
     final currentUser = AuthService().currentUser;
     final isMe = currentUser?.uid == userId;
 
-    // Determine effective distance to show
     double effectiveDistance = currentDistance;
     if (isMe && localDist != null) {
         effectiveDistance = localDist;
     }
-    
+
+    final isChaser = role == 'chaser';
+    final roleColor = isChaser ? AppColors.bloodRed : AppColors.pulseBlue;
+    final roleIcon = isChaser ? Icons.gps_fixed : Icons.directions_run;
+    final roleLabel = isChaser ? 'CHASER' : 'RUNNER';
+
     return userProfileAsync.when(
       data: (user) {
-        return ListTile(
-          leading: CircleAvatar(
-            backgroundImage: user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
-            child: user.photoUrl == null ? Text(user.displayName[0].toUpperCase()) : null,
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.fogGrey,
+            border: Border(
+              left: BorderSide(color: roleColor, width: 4),
+            ),
           ),
-          title: Text(user.displayName),
-          subtitle: Row(
-            children: [
-                Text(role),
-                if (effectiveDistance >= 0) ...[
-                    const SizedBox(width: 8),
-                    Container(width: 1, height: 12, color: Colors.grey),
-                    const SizedBox(width: 8),
-                    Text('${effectiveDistance.toStringAsFixed(0)}m', style: const TextStyle(fontWeight: FontWeight.bold)),
-                ]
-            ],
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: roleColor.withOpacity(0.2),
+              child: Icon(roleIcon, color: roleColor),
+            ),
+            title: Text(
+              user.displayName.toUpperCase(),
+              style: GoogleFonts.jetBrainsMono(
+                fontWeight: FontWeight.bold,
+                color: AppColors.ghostWhite,
+                letterSpacing: 1,
+              ),
+            ),
+            subtitle: Row(
+              children: [
+                  Text(
+                    roleLabel,
+                    style: GoogleFonts.jetBrainsMono(fontSize: 10, color: roleColor, letterSpacing: 1),
+                  ),
+                  if (effectiveDistance >= 0) ...[
+                      const SizedBox(width: 8),
+                      Container(width: 1, height: 12, color: AppColors.textMuted),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${effectiveDistance.toStringAsFixed(0)}m',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.toxicGreen,
+                        ),
+                      ),
+                  ]
+              ],
+            ),
+            trailing: isOwner
+                ? const Icon(Icons.star, color: AppColors.warningYellow)
+                : Icon(Icons.chevron_right, color: AppColors.textMuted),
+            onTap: () => _showPlayerStats(context, ref, user.displayName),
           ),
-          trailing: isOwner 
-              ? const Icon(Icons.star, color: Colors.amber) 
-              : const Icon(Icons.info_outline, color: Colors.grey),
-          onTap: () => _showPlayerStats(context, ref, user.displayName),
         );
       },
-      loading: () => const ListTile(
-        leading: CircleAvatar(child: CircularProgressIndicator(strokeWidth: 2)),
-        title: Text('Loading...'),
+      loading: () => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        color: AppColors.fogGrey,
+        child: const ListTile(
+          leading: CircleAvatar(
+            backgroundColor: AppColors.voidBlack,
+            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.bloodRed)),
+          ),
+          title: Text('Loading...'),
+        ),
       ),
-      error: (_, __) => ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.error)),
-        title: Text('Unknown User ($userId)'),
+      error: (_, __) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        color: AppColors.fogGrey,
+        child: ListTile(
+          leading: const CircleAvatar(
+            backgroundColor: AppColors.bloodRed,
+            child: Icon(Icons.error, color: AppColors.ghostWhite),
+          ),
+          title: Text(
+            'Unknown User',
+            style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary),
+          ),
+        ),
       ),
     );
   }
@@ -631,68 +934,90 @@ class SessionPlayerTile extends ConsumerWidget {
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
-            title: Text('$displayName\'s Stats'),
+            backgroundColor: AppColors.fogGrey,
+            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            title: Text(
+              '${displayName.toUpperCase()}\'S STATS',
+              style: GoogleFonts.creepster(fontSize: 20, color: AppColors.ghostWhite),
+            ),
             content: Consumer(
                 builder: (context, ref, child) {
                     final otherPlayerStats = ref.watch(otherPlayerProfileFamily(userId));
                     final sessionPlayersAsync = ref.watch(playersStreamProvider(sessionId));
-                    
-                    // Get live session data for this player
+
                     final livePlayer = sessionPlayersAsync.asData?.value
                         .where((p) => p.userId == userId)
                         .firstOrNull;
                     final liveDistance = livePlayer?.currentDistance ?? 0.0;
-                    
+
                     return otherPlayerStats.when(
                         data: (stats) {
-                            if (stats == null) return const Text('No stats available.');
+                            if (stats == null) {
+                              return Text(
+                                'No stats available.',
+                                style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary),
+                              );
+                            }
                             return Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                    Text('Level: ${stats.level}'),
-                                    const SizedBox(height: 8),
-                                    Text('Games Played: ${stats.totalGamesPlayed}'),
-                                    Text('Wins: ${stats.totalWins}'),
-                                    Text('Captures: ${stats.totalCaptures}'),
-                                    Text('Escapes: ${stats.totalEscapes}'),
-                                    const SizedBox(height: 8),
-                                    Text('Total Distance: ${stats.totalDistance.toStringAsFixed(1)}m'),
-                                    const Divider(),
-                                    const Text('Debug Distance:', style: TextStyle(fontWeight: FontWeight.bold)),
-                                    Text('Current: ${liveDistance.toStringAsFixed(1)}m'),
+                                    _statRow('Level', '${stats.level}'),
+                                    _statRow('Games Played', '${stats.totalGamesPlayed}'),
+                                    _statRow('Wins', '${stats.totalWins}'),
+                                    _statRow('Captures', '${stats.totalCaptures}'),
+                                    _statRow('Escapes', '${stats.totalEscapes}'),
+                                    _statRow('Total Distance', '${stats.totalDistance.toStringAsFixed(1)}m'),
+                                    const SizedBox(height: 16),
+                                    const Divider(color: AppColors.textMuted),
+                                    Text('DEBUG', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppColors.textMuted, letterSpacing: 2)),
+                                    _statRow('Current Distance', '${liveDistance.toStringAsFixed(1)}m'),
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                       children: [
                                         IconButton(
-                                          icon: const Icon(Icons.remove_circle_outline),
+                                          icon: const Icon(Icons.remove_circle_outline, color: AppColors.bloodRed),
                                           onPressed: () => _updateDistance(liveDistance, -1.0),
-                                          tooltip: '-1m',
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.add_circle_outline),
+                                          icon: const Icon(Icons.add_circle_outline, color: AppColors.toxicGreen),
                                           onPressed: () => _updateDistance(liveDistance, 1.0),
-                                          tooltip: '+1m',
                                         ),
                                         TextButton(
                                           onPressed: () => _setDistanceDialog(context, liveDistance),
-                                          child: const Text('Set'),
+                                          child: Text('SET', style: GoogleFonts.jetBrainsMono(color: AppColors.pulseBlue)),
                                         ),
                                       ],
                                     ),
                                 ],
                             );
                         },
-                        loading: () => const Center(child: CircularProgressIndicator()),
-                        error: (e,s) => Text('Error: $e'),
+                        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
+                        error: (e,s) => Text('Error: $e', style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed)),
                     );
                 }
             ),
             actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('CLOSE', style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary, letterSpacing: 2)),
+                ),
             ],
         ),
       );
+  }
+
+  Widget _statRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.textSecondary)),
+          Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.ghostWhite)),
+        ],
+      ),
+    );
   }
 
   Future<void> _updateDistance(double currentDist, double delta) async {
@@ -702,20 +1027,29 @@ class SessionPlayerTile extends ConsumerWidget {
 
   Future<void> _setDistanceDialog(BuildContext context, double currentDist) async {
       final controller = TextEditingController(text: currentDist.toStringAsFixed(1));
-      
+
       await showDialog(
           context: context,
           builder: (context) => AlertDialog(
-              title: const Text('Set Distance'),
+              backgroundColor: AppColors.fogGrey,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              title: Text('SET DISTANCE', style: GoogleFonts.creepster(fontSize: 20, color: AppColors.ghostWhite)),
               content: TextField(
                   controller: controller,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Distance (meters)'),
+                  style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
+                  decoration: InputDecoration(
+                    labelText: 'Distance (meters)',
+                    labelStyle: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary),
+                    filled: true,
+                    fillColor: AppColors.voidBlack,
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+                  ),
               ),
               actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
+                      child: Text('CANCEL', style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary)),
                   ),
                   FilledButton(
                       onPressed: () async {
@@ -725,7 +1059,11 @@ class SessionPlayerTile extends ConsumerWidget {
                               if (context.mounted) Navigator.pop(context);
                           }
                       },
-                      child: const Text('Save'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.bloodRed,
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                      ),
+                      child: Text('SAVE', style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold)),
                   ),
               ],
           ),
@@ -735,22 +1073,22 @@ class SessionPlayerTile extends ConsumerWidget {
 
 class _HeadstartTimer extends StatefulWidget {
     final DateTime endTime;
-    
+
     const _HeadstartTimer({required this.endTime, Key? key}) : super(key: key);
-    
+
     @override
     State<_HeadstartTimer> createState() => _HeadstartTimerState();
 }
 
 class _HeadstartTimerState extends State<_HeadstartTimer> {
     late Stream<int> _timer;
-    
+
     @override
     void initState() {
         super.initState();
         _timer = Stream.periodic(const Duration(seconds: 1), (x) => x);
     }
-    
+
     @override
     Widget build(BuildContext context) {
         return StreamBuilder<int>(
@@ -758,15 +1096,29 @@ class _HeadstartTimerState extends State<_HeadstartTimer> {
             builder: (context, snapshot) {
                 final now = DateTime.now();
                 final remaining = widget.endTime.difference(now);
-                
+
                 if (remaining.isNegative) {
-                    return const Text('Started!');
+                    return Text(
+                      'RELEASED!',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.bloodRed,
+                        letterSpacing: 2,
+                      ),
+                    );
                 }
-                
+
                 final m = remaining.inMinutes;
                 final s = (remaining.inSeconds % 60).toString().padLeft(2, '0');
-                
-                return Text('Release in $m:$s');
+
+                return Text(
+                  'RELEASE IN $m:$s',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.warningYellow,
+                    letterSpacing: 1,
+                  ),
+                );
             }
         );
     }
@@ -775,9 +1127,9 @@ class _HeadstartTimerState extends State<_HeadstartTimer> {
 class _CaptureTimer extends StatefulWidget {
     final DateTime endTime;
     final VoidCallback? onExpired;
-    
+
     const _CaptureTimer({required this.endTime, this.onExpired, Key? key}) : super(key: key);
-    
+
     @override
     State<_CaptureTimer> createState() => _CaptureTimerState();
 }
@@ -785,13 +1137,13 @@ class _CaptureTimer extends StatefulWidget {
 class _CaptureTimerState extends State<_CaptureTimer> {
     late Stream<int> _timer;
     bool _expiredTriggered = false;
-    
+
     @override
     void initState() {
         super.initState();
         _timer = Stream.periodic(const Duration(seconds: 1), (x) => x);
     }
-    
+
     @override
     Widget build(BuildContext context) {
         return StreamBuilder<int>(
@@ -799,27 +1151,34 @@ class _CaptureTimerState extends State<_CaptureTimer> {
             builder: (context, snapshot) {
                 final now = DateTime.now();
                 final remaining = widget.endTime.difference(now);
-                
+
                 if (remaining.isNegative) {
                     if (!_expiredTriggered) {
                         _expiredTriggered = true;
-                        // Schedule callback for next frame to avoid build-time side effects
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                            widget.onExpired?.call();
                         });
                     }
-                    return const Text('Capturing...', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold));
+                    return Text(
+                      'CAPTURING...',
+                      style: GoogleFonts.creepster(
+                        color: AppColors.bloodRed,
+                        fontSize: 16,
+                        letterSpacing: 2,
+                      ),
+                    );
                 }
-                
-                // Reset trigger if we go back to positive (e.g. deadline extended? unlikely but safe)
-                // _expiredTriggered = false; 
 
                 final m = remaining.inMinutes;
                 final s = (remaining.inSeconds % 60).toString().padLeft(2, '0');
-                
+
                 return Text(
-                    'Time remaining: $m:$s', 
-                    style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)
+                    'TIME REMAINING: $m:$s',
+                    style: GoogleFonts.jetBrainsMono(
+                      color: AppColors.bloodRed,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                 );
             }
         );
@@ -847,7 +1206,6 @@ class _GameLoopMonitorState extends State<_GameLoopMonitor> {
   @override
   void initState() {
     super.initState();
-    // Check every 2 seconds
     _monitorTimer = Timer.periodic(const Duration(seconds: 2), _checkDeadlines);
   }
 
@@ -858,17 +1216,16 @@ class _GameLoopMonitorState extends State<_GameLoopMonitor> {
   }
 
   Future<void> _checkDeadlines(Timer t) async {
-    if (_isTriggering) return; // Debounce
+    if (_isTriggering) return;
 
     final now = DateTime.now();
     bool needsTrigger = false;
 
-    // Check if ANY runner has an expired deadline
     for (final player in widget.players) {
-      if (player.role == 'runner' && 
+      if (player.role == 'runner' &&
           player.captureState == 'being_chased' &&
           player.captureDeadline != null) {
-          
+
           if (now.isAfter(player.captureDeadline!.toDate())) {
             needsTrigger = true;
             break;
@@ -895,7 +1252,7 @@ class _GameLoopMonitorState extends State<_GameLoopMonitor> {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.shrink(); // Invisible widget
+    return const SizedBox.shrink();
   }
 }
 
@@ -904,7 +1261,7 @@ class _ChaserCaptureStatus extends ConsumerWidget {
   final String sessionId;
 
   const _ChaserCaptureStatus({
-    required this.victims, 
+    required this.victims,
     required this.sessionId,
     Key? key,
   }) : super(key: key);
@@ -913,32 +1270,48 @@ class _ChaserCaptureStatus extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
       if (victims.isEmpty) return const SizedBox.shrink();
 
-      // For simplicity, display the first victim found (or format list)
       final victim = victims.first;
       final userProfileAsync = ref.watch(userProfileFamily(victim.userId));
-      
+
       return Container(
-        color: Colors.green.withOpacity(0.1),
-        padding: const EdgeInsets.all(12),
+        color: AppColors.toxicGreen.withOpacity(0.15),
+        padding: const EdgeInsets.all(16),
         margin: const EdgeInsets.only(bottom: 8),
         child: Row(
           children: [
-            const Icon(Icons.track_changes, color: Colors.green, size: 32),
-            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              color: AppColors.toxicGreen.withOpacity(0.3),
+              child: const Icon(Icons.track_changes, color: AppColors.toxicGreen, size: 32),
+            ),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   userProfileAsync.when(
                     data: (profile) => Text(
-                        'You are capturing ${profile?.displayName ?? 'Runner'}!', 
-                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)
+                        'CAPTURING ${profile?.displayName.toUpperCase() ?? 'RUNNER'}!',
+                        style: GoogleFonts.creepster(
+                          color: AppColors.toxicGreen,
+                          fontSize: 16,
+                          letterSpacing: 2,
+                        ),
                     ),
-                    loading: () => const Text('You are capturing...', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                    error: (_,__) => const Text('You are capturing...', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    loading: () => Text(
+                      'CAPTURING...',
+                      style: GoogleFonts.creepster(color: AppColors.toxicGreen, fontSize: 16),
+                    ),
+                    error: (_,__) => Text(
+                      'CAPTURING...',
+                      style: GoogleFonts.creepster(color: AppColors.toxicGreen, fontSize: 16),
+                    ),
                   ),
-                  const Text("Don't let them escape!", style: TextStyle(fontSize: 12)),
-                  const SizedBox(height: 4),
+                  Text(
+                    "Don't let them escape!",
+                    style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
+                  ),
+                  const SizedBox(height: 8),
                   _CaptureTimer(
                       endTime: victim.captureDeadline!.toDate(),
                       onExpired: () => FirestoreService().triggerCaptureCheck(sessionId),
@@ -952,11 +1325,9 @@ class _ChaserCaptureStatus extends ConsumerWidget {
   }
 }
 
-
-
 class _DistanceMonitor extends ConsumerStatefulWidget {
   final String sessionId;
-  final String? userId; // Nullable to handle loading/auth states gracefully
+  final String? userId;
   final DateTime startTime;
   final double baseOffset;
 
@@ -977,9 +1348,9 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
   Timer? _timer;
   StreamSubscription? _subscription;
   bool _hasPermissions = false;
-  
+
   double _currentTotalDistance = 0.0;
-  double _lastStoredDistance = -20.0; // Init to allow first write (0 - (-20) > 10)
+  double _lastStoredDistance = -20.0;
 
   @override
   void initState() {
@@ -990,7 +1361,6 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
   Future<void> _initPedometer() async {
     _hasPermissions = await _pedometerService.requestPermissions();
     if (_hasPermissions && mounted) {
-      // 1. Start Stream for live local updates (no write)
       _subscription = _pedometerService.getPedometerStream(widget.startTime).listen((data) {
           try {
              final dynamic distVal = data.distance;
@@ -1001,10 +1371,8 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
                    setState(() {
                      _currentTotalDistance = total;
                    });
-                   // Update provider for optimistic UI
                    ref.read(localDistanceProvider.notifier).update(total);
                  }
-                 // debugPrint("DistanceMonitor: Stream Update - Local Total: $_currentTotalDistance");
              }
           } catch (e) {
              debugPrint("DistanceMonitor: Stream Processing Error: $e");
@@ -1013,18 +1381,14 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
           debugPrint("DistanceMonitor: Stream Error: $e");
       });
 
-      // 2. Periodic timer checks for significant changes to write
       _timer = Timer.periodic(const Duration(seconds: 10), _checkAndWriteDistance);
-      
-      // Initial check
       _checkAndWriteDistance(null);
     }
   }
 
   Future<void> _checkAndWriteDistance(Timer? t) async {
     if (widget.userId == null) return;
-    
-    // 1. Poll to ensure we have the absolute latest (sync with stream)
+
     try {
         final double pedometerDist = await _pedometerService.getDistance(widget.startTime, DateTime.now());
         if (mounted) {
@@ -1034,15 +1398,12 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
         debugPrint("DistanceMonitor: Poll Error: $e");
     }
 
-    // 2. Check threshold
     final double diff = (_currentTotalDistance - _lastStoredDistance).abs();
-    
+
     if (diff > 10.0) {
         debugPrint("DistanceMonitor: Threshold met (Diff: ${diff.toStringAsFixed(1)}m). Writing: ${_currentTotalDistance.toStringAsFixed(1)}m");
         await _updateFirestore(_currentTotalDistance);
         _lastStoredDistance = _currentTotalDistance;
-    } else {
-        // debugPrint("DistanceMonitor: Threshold not met (Diff: ${diff.toStringAsFixed(1)}m). Skipping write.");
     }
   }
 
@@ -1060,6 +1421,6 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.shrink(); 
+    return const SizedBox.shrink();
   }
 }
