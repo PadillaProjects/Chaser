@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:chaser/models/player.dart';
 import 'package:chaser/models/player_profile.dart'; // Added
 import 'package:chaser/models/session.dart';
@@ -285,8 +286,14 @@ class FirestoreService {
       final players = membersSnap.docs.map((d) => PlayerModel.fromFirestore(d)).toList();
       
       final batch = _firestore.batch();
-      _runGameLogic(session, players, batch, null, null); // No specific user update
+      final endReason = await _runGameLogic(session, players, batch, null, null);
+      
+      if (endReason != null) {
+          await _calculateAndSaveResults(session, players, batch, endReason);
+      }
+      
       await batch.commit();
+
   }
 
   Future<void> updatePlayerDistance(String sessionId, String userId, double newDistance) async {
@@ -315,12 +322,18 @@ class FirestoreService {
       batch.update(myDocRef, {'current_distance': newDistance});
 
       // 3. Run Logic
-      _runGameLogic(session, players, batch, userId, newDistance);
+      final endReason = await _runGameLogic(session, players, batch, userId, newDistance);
+      
+      if (endReason != null) {
+          await _calculateAndSaveResults(session, players, batch, endReason);
+      }
       
       await batch.commit();
+
   }
 
-  void _runGameLogic(SessionModel session, List<PlayerModel> players, WriteBatch batch, String? updatingUserId, double? newDistance) {
+  Future<String?> _runGameLogic(SessionModel session, List<PlayerModel> players, WriteBatch batch, String? updatingUserId, double? newDistance) async {
+
       // Calculate maxChaserDistance
       double maxChaserDistance = 0;
       for (var p in players) {
@@ -351,10 +364,34 @@ class FirestoreService {
               if (caught) {
                   if (session.instantCapture) {
                       // Instant Capture
+                      // Find WHO caught them (Max Distance Chaser - simplified attribution)
+                      // Ideally we'd know which specific chaser triggered it, but here we just take the leader or the one updating if they are a chaser.
+                      String capturerId = 'unknown';
+                      
+                      // Best guess attribution:
+                      // If the *updater* is a chaser and active, they probably did it.
+                      // Else, attribute to the Chaser with max distance (leading chaser).
+                      
+                      final updater = players.firstWhere((p) => p.userId == updatingUserId, orElse: () => players.first);
+                      if (updater.role == 'chaser') {
+                         capturerId = updater.userId;
+                      } else {
+                         // Find chaser with max distance
+                         double maxD = -1;
+                         for(var c in players) {
+                            if (c.role == 'chaser' && c.currentDistance > maxD) {
+                                maxD = c.currentDistance;
+                                capturerId = c.userId;
+                            }
+                         }
+                      }
+
                       batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
                           'capture_state': 'captured',
                           'role': 'spectator',
                           'capture_deadline': FieldValue.delete(),
+                          'captured_by': capturerId,
+                          'capture_time': FieldValue.serverTimestamp(),
                       });
                       captureHappened = true;
                       // DO NOT increment activeRunnerCount
@@ -371,10 +408,25 @@ class FirestoreService {
                       } else if (p.captureState == 'being_chased') {
                           // Check if deadline passed
                           if (p.captureDeadline != null && now.isAfter(p.captureDeadline!.toDate())) {
+                                   // DELAYED CAPTURE (Timeout)
+                                   // Attribute to the chaser who *initiated* the chase? 
+                                   // Or the one currently leading?
+                                   // Simplified: Attribute to leading chaser at time of capture.
+                                    String capturerId = 'unknown';
+                                     double maxD = -1;
+                                     for(var c in players) {
+                                        if (c.role == 'chaser' && c.currentDistance > maxD) {
+                                            maxD = c.currentDistance;
+                                            capturerId = c.userId;
+                                        }
+                                     }
+
                                    batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
                                       'capture_state': 'captured',
                                       'role': 'spectator',
                                       'capture_deadline': FieldValue.delete(),
+                                      'captured_by': capturerId,
+                                      'capture_time': FieldValue.serverTimestamp(),
                                    });
                                    captureHappened = true;
                                    // DO NOT increment activeRunnerCount
@@ -408,19 +460,276 @@ class FirestoreService {
       
       // If we are processing updates and it results in 0 active runners, end the game.
       if (activeRunnerCount == 0 && players.isNotEmpty && session.status == 'active') { // Only stop if active
-           batch.update(_firestore.collection('sessions').doc(session.id), {
-             'status': 'completed',
-             'end_time': FieldValue.serverTimestamp(),
-           });
+           // Chasers Win (or everyone captured)
+           return 'chasers_win';
       }
+      
+      // Check Time limit (Runners Win) (Only if scheduled/actual start time exists)
+      final start = session.actualStartTime?.toDate();
+      if (start != null && session.status == 'active') {
+          final end = start.add(Duration(days: session.durationDays));
+          if (now.isAfter(end) && activeRunnerCount > 0) {
+              return 'runners_win';
+          }
+      }
+
+      return null;
   }
 
-  Future<void> stopGame(String sessionId) async {
-    await _firestore.collection('sessions').doc(sessionId).update({
-      'status': 'completed',
-      'end_time': FieldValue.serverTimestamp(),
-    });
+  Future<void> _calculateAndSaveResults(SessionModel session, List<PlayerModel> players, WriteBatch batch, String endReason) async {
+      // 1. Determine Winner Role
+      String winnerRole = 'none';
+      if (endReason == 'chasers_win') winnerRole = 'chaser';
+      else if (endReason == 'runners_win') winnerRole = 'runner';
+      
+      final playerResults = <String, dynamic>{};
+      
+      // Calculate Session Duration in Hours (or planned duration if session is still 'active' but forced stop)
+      // Actually, use actual duration.
+      final startTime = session.actualStartTime?.toDate() ?? DateTime.now(); // Fallback if not started
+      final endTime = DateTime.now(); // End time is NOW
+      final durationHours = endTime.difference(startTime).inHours;
+      final safeDurationHours = durationHours < 1 ? 1 : durationHours; // Minimum 1 hour for modifiers
+      
+      // Long Session Efficiency Factor
+      // Caps at 1.35 for >= 72 hours.
+      // Formula: 1.0 + (min(hours, 72) / 72) * 0.35
+      final cappedHours = safeDurationHours > 72 ? 72 : safeDurationHours;
+      final longSessionFactor = 1.0 + (cappedHours / 72.0) * 0.35;
+      
+      // Pre-process Chaser Capture Counts for Streaks
+      final chaserCaptureCounts = <String, int>{};
+      for(var p in players) {
+          if (p.role == 'runner' && p.captureState == 'captured' && p.capturedBy != null) {
+              chaserCaptureCounts[p.capturedBy!] = (chaserCaptureCounts[p.capturedBy!] ?? 0) + 1;
+          }
+      }
+      
+      for (var p in players) {
+          final pDoc = await _firestore.collection('player_profiles').doc(p.userId).get();
+          PlayerProfile profile;
+          if (pDoc.exists) {
+              profile = PlayerProfile.fromFirestore(pDoc);
+          } else {
+              profile = PlayerProfile(
+                  userId: p.userId,
+                  level: 1,
+                  totalXP: 0,
+                  totalCoins: 0,
+                  totalDistance: 0,
+                  totalGamesPlayed: 0,
+                  createdAt: DateTime.now(),
+              );
+          }
+          
+          // --- SCORING LOGIC ---
+          double totalPoints = 0.0;
+          Map<String, dynamic> pointsBreakdown = {};
+          
+          if (p.role == 'runner') {
+              // RUNNER SCORING
+              
+              // 1. Survival Points: 2 pts per hour survived
+              // If captured, use time until capture. If won/survived, use session duration.
+              int hoursSurvived = safeDurationHours;
+              if (p.captureState == 'captured' && p.captureTime != null && session.actualStartTime != null) {
+                   final livedDuration = p.captureTime!.toDate().difference(session.actualStartTime!.toDate()).inHours;
+                   hoursSurvived = livedDuration < 0 ? 0 : livedDuration;
+              }
+              double survivalPoints = hoursSurvived * 2.0;
+              
+              // 2. Distance Points: 1 pt per 250m
+              // Daily Cap: 100 pts/day (approx 25km/day). 
+              // Cap = 100 * (DurationHours / 24)
+              double maxDistPoints = 100.0 * (safeDurationHours / 24.0);
+              if (maxDistPoints < 10) maxDistPoints = 10; // Minimum cap buffer
+              
+              double distPoints = p.currentDistance / 250.0;
+              if (distPoints > maxDistPoints) distPoints = maxDistPoints;
+              
+              double basePoints = survivalPoints + distPoints;
+              
+              if (p.captureState == 'captured') {
+                  // CAPTURED PENALTY: 50% of accumulated points, NO bonus.
+                  totalPoints = basePoints * 0.5;
+                  pointsBreakdown = {
+                      'survival': survivalPoints,
+                      'distance': distPoints,
+                      'penalty': '50% (Captured)',
+                  };
+              } else {
+                  // SURVIVOR BONUS
+                  // 12.5 * PlannedSessionLength (Hours) * LongSessionFactor
+                  // Note: User said "Planned Session Length". We have session.durationDays.
+                  double plannedHours = session.durationDays * 24.0;
+                  double completionBonus = 12.5 * plannedHours * longSessionFactor;
+                  
+                  // Only award completion bonus if they actually WON (timeout reached)
+                  // If chasers gave up or game stopped manually, maybe reduced bonus?
+                  // Rule: "if they survive until timeout"
+                  if (winnerRole == 'runner') {
+                       totalPoints = basePoints + completionBonus;
+                       pointsBreakdown = {
+                          'survival': survivalPoints,
+                          'distance': distPoints,
+                          'completion_bonus': completionBonus,
+                       };
+                  } else {
+                       // Game stopped early, no completion bonus but full base points?
+                       totalPoints = basePoints;
+                       pointsBreakdown = {
+                          'survival': survivalPoints,
+                          'distance': distPoints,
+                          'note': 'No completion bonus (Manual Stop)',
+                       };
+                  }
+              }
+              
+          } else if (p.role == 'chaser') {
+              // CHASER SCORING
+              
+              // 1. Distance Points: 1 pt per 400m
+              // Lower Daily Cap: 50 pts/day (approx 20km/day)? User said "lower daily cap". Let's assume 60.
+              double maxDistPoints = 60.0 * (safeDurationHours / 24.0);
+              if (maxDistPoints < 10) maxDistPoints = 10;
+              
+              double distPoints = p.currentDistance / 400.0;
+              if (distPoints > maxDistPoints) distPoints = maxDistPoints;
+              
+              // 2. Capture Rewards
+              // Base Bonus: 15 * SessionLength (Hours)
+              // Multiplier: 0.5 * RunnerLongSessionFactor (which is just 'longSessionFactor' here)
+              // Streak Multiplier: Grows with each capture cap 1.40.
+              // Formula implies per-capture calc? Or total?
+              // "per-session capture streak multiplier that grows with each additional capture"
+              
+              int myCaptures = chaserCaptureCounts[p.userId] ?? 0;
+              double capturePoints = 0.0;
+              
+              // Let's assume simple linear growth for streak: 1.0, 1.1, 1.2, 1.3, 1.4 (Cap)
+              // Or just `1.0 + (count * 0.1)` capped at 1.4?
+              double currentStreakMult = 1.0; 
+              
+              // Calculate points for EACH capture (if we tracked them individually we could do sequential)
+              // Since we just have total count, we can simulate the sequence.
+              for (int i = 0; i < myCaptures; i++) {
+                   // Streak multiplier for THIS capture
+                   // 1st capture: 1.0? Or starts with bonus?
+                   // "grows *with each additional capture*". So 1st is base, 2nd is higher.
+                   // Let's say: 1st=1.0, 2nd=1.1, 3rd=1.2...
+                   double streak = 1.0 + (i * 0.1);
+                   if (streak > 1.40) streak = 1.40;
+                   
+                   // Points for this capture
+                   // 15 * SessionHours * (0.5 * LongSessionFactor) * Streak
+                   double plannedHours = session.durationDays * 24.0;
+                   double oneCaptureVal = 15.0 * plannedHours * (0.5 * longSessionFactor) * streak;
+                   capturePoints += oneCaptureVal;
+              }
+              
+              totalPoints = distPoints + capturePoints;
+              
+              // Fallback Reward
+              if (myCaptures == 0 && winnerRole == 'chaser') {
+                  // They didn't capture anyone but team won? Or just timeout reached?
+                  // "chasers who fail to capture anyone by timeout receive at most a small fallback reward"
+                  totalPoints += 50.0; // Small consolation
+              }
+              
+              pointsBreakdown = {
+                  'distance': distPoints,
+                  'captures': myCaptures,
+                  'capture_points': capturePoints,
+              };
+          }
+          
+          // CONVERT TO XP
+          // 1 XP per 10 Session Points
+          int xpEarned = (totalPoints / 10.0).floor();
+          if (xpEarned < 0) xpEarned = 0; // Safety
+          
+          // Win/Loss Stat Update logic
+          bool isWinner = (p.role == winnerRole);
+          
+          // Update Stats
+          int newLevel = profile.level;
+          int currentXP = profile.totalXP + xpEarned;
+          
+          // Dynamic Level Up Logic
+          // Formula: Threshold = 100 * (1.1 ^ (level - 1))
+          while (true) {
+              int threshold = (100 * pow(1.1, newLevel - 1)).round();
+              if (currentXP >= threshold) {
+                  currentXP -= threshold;
+                  newLevel++;
+              } else {
+                  break;
+              }
+          }
+          
+          // Stats
+          int wins = profile.totalWins + (isWinner ? 1 : 0);
+          int losses = profile.totalLosses + (!isWinner && winnerRole != 'none' ? 1 : 0);
+          double totalDist = profile.totalDistance + p.currentDistance;
+          
+          playerResults[p.userId] = {
+              'role': p.role,
+              'outcome': isWinner ? 'won' : (winnerRole != 'none' ? 'lost' : 'neutral'),
+              'xp_earned': xpEarned,
+              'session_points': totalPoints.round(), // Save raw points too for display
+              'old_level': profile.level,
+              'new_level': newLevel,
+              'new_total_xp': currentXP, // Added for accurate progress display
+              'stats': {
+                  'distance': p.currentDistance,
+              },
+              'breakdown': pointsBreakdown,
+          };
+          
+          // Add Profile Update to Batch
+          final profileRef = _firestore.collection('player_profiles').doc(p.userId);
+          batch.set(profileRef, {
+              'level': newLevel,
+              'total_xp': currentXP,
+              // 'xp_to_next_level': threshold, // Removed, dynamic now
+              'total_games_played': FieldValue.increment(1),
+              'total_wins': wins,
+              'total_losses': losses,
+              'total_distance': totalDist,
+              'last_game_at': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+      }
+      
+      // 4. Update Session Status & Results
+      batch.update(_firestore.collection('sessions').doc(session.id), {
+          'status': 'completed',
+          'end_time': FieldValue.serverTimestamp(),
+          'results': {
+              'winner_role': winnerRole,
+              'end_reason': endReason,
+              'player_results': playerResults,
+          }
+      });
   }
+
+
+  Future<void> stopGame(String sessionId) async {
+    final sessionDoc = await _firestore.collection('sessions').doc(sessionId).get();
+    if(!sessionDoc.exists) return;
+    final session = SessionModel.fromFirestore(sessionDoc);
+
+    // Fetch players for stats
+    final membersSnap = await _firestore.collection('session_members').where('session_id', isEqualTo: sessionId).get();
+    final players = membersSnap.docs.map((d) => PlayerModel.fromFirestore(d)).toList();
+
+    final batch = _firestore.batch();
+    
+    // Calculate partial results (End Reason: stopped)
+    await _calculateAndSaveResults(session, players, batch, 'stopped');
+    
+    await batch.commit();
+  }
+
 
   Future<void> resetGame(String sessionId) async {
       // 1. Fetch current members

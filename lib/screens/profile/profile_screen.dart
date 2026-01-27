@@ -176,6 +176,48 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                 ),
                 const SizedBox(height: 32),
+                const SizedBox(height: 24),
+                // Level & XP
+                playerProfileAsync.when(
+                  data: (playerProfileData) {
+                    // Default profile if null
+                    final playerProfile = playerProfileData ?? PlayerProfile(
+                        userId: userProfile.uid,
+                        level: 1,
+                        totalXP: 0,
+                        totalCoins: 0,
+                        totalDistance: 0,
+                        totalGamesPlayed: 0,
+                        createdAt: DateTime.now(),
+                    );
+                    
+                    return Column(
+                      children: [
+                        Text('Level ${playerProfile.level}', style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          color: Theme.of(context).primaryColor,
+                          fontWeight: FontWeight.bold,
+                        )),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: LinearProgressIndicator(
+                            value: playerProfile.currentLevelProgress, 
+                            minHeight: 12,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${playerProfile.xpSinceCurrentLevelStart} / ${playerProfile.xpRequiredForNextLevel} XP',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    );
+                  }, 
+                  loading: () => const SizedBox(height: 50),
+                  error: (_,__) => const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 24),
                 const Divider(),
                 const SizedBox(height: 16),
                 Text(
@@ -186,10 +228,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 
                 // Stats Display
                 playerProfileAsync.when(
-                  data: (playerProfile) {
-                    if (playerProfile == null) {
-                      return const Center(child: Text('Start playing to see stats!'));
-                    }
+                  data: (playerProfileData) {
+                    // Default profile if null
+                    final playerProfile = playerProfileData ?? PlayerProfile(
+                        userId: userProfile.uid, // Use auth uid
+                        level: 1,
+                        totalXP: 0,
+                        totalCoins: 0,
+                        totalDistance: 0,
+                        totalGamesPlayed: 0,
+                        createdAt: DateTime.now(),
+                    );
+                    
                      return GridView.count(
                       crossAxisCount: 2,
                       shrinkWrap: true,

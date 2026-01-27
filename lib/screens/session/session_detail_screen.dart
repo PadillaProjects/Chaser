@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:chaser/models/user_profile.dart'; 
 import 'package:go_router/go_router.dart';
+import 'package:chaser/screens/session/game_results_view.dart';
+
 
 final sessionStreamProvider = StreamProvider.family((ref, String sessionId) {
   return FirestoreService().watchSession(sessionId);
@@ -48,6 +50,8 @@ class SessionDetailScreen extends ConsumerStatefulWidget {
 
 class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
   final _firestoreService = FirestoreService();
+  bool _showResults = true;
+
 
   Future<void> _pickScheduledTime(Timestamp? currentScheduledTime) async {
     final now = DateTime.now();
@@ -158,7 +162,16 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Error: $err')),
         data: (session) {
+          if (session.status == 'completed' && _showResults && session.results != null) {
+              return GameResultsView(
+                  session: session,
+                  currentUserId: currentUser?.uid ?? '',
+                  onDismiss: () => setState(() => _showResults = false),
+              );
+          }
+
           return Column(
+
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Header
@@ -397,15 +410,43 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               ] else if (session.ownerId == currentUser?.uid && session.status == 'completed') ...[
                   Padding(
                    padding: const EdgeInsets.all(16.0),
-                   child: ElevatedButton.icon(
-                     onPressed: () => _resetGame(session.id),
-                     style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-                     icon: const Icon(Icons.refresh),
-                     label: const Text('Reset Game'),
+                   child: Column(
+                       crossAxisAlignment: CrossAxisAlignment.stretch,
+                       children: [
+                           ElevatedButton.icon(
+                             onPressed: () => _resetGame(session.id),
+                             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                             icon: const Icon(Icons.refresh),
+                             label: const Text('Reset Game'),
+                           ),
+                           const SizedBox(height: 8),
+                           OutlinedButton(
+                                onPressed: () => setState(() => _showResults = true),
+                                child: const Text('View Results'),
+                            ),
+                       ],
                    ),
                  )
+
+              ] else if (session.status == 'completed') ...[
+                 Padding(
+                   padding: const EdgeInsets.all(16.0),
+                   child: Center(
+                     child: Column(
+                        children: [
+                            const Text('Game Completed', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                            const SizedBox(height: 8),
+                            ElevatedButton(
+                                onPressed: () => setState(() => _showResults = true),
+                                child: const Text('View Results'),
+                            ),
+                        ],
+                     ),
+                   ),
+                 ),
               ] else 
                 Padding(
+
                   padding: const EdgeInsets.all(16.0),
                   child: Center(
                     child: Text(

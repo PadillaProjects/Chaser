@@ -39,6 +39,11 @@ class SessionModel {
   final Timestamp? actualStartTime; // Added
   final Timestamp? createdAt;
 
+  
+  // Endgame Results
+  final Map<String, dynamic>? results;
+
+
   SessionModel({
     required this.id,
     required this.name,
@@ -64,7 +69,10 @@ class SessionModel {
     this.scheduledStartTime,
     this.actualStartTime, // Added
     this.createdAt,
+
+    this.results,
   });
+
 
   factory SessionModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -98,8 +106,11 @@ class SessionModel {
       scheduledStartTime: data['scheduled_start_time'] as Timestamp?,
       actualStartTime: data['actual_start_time'] as Timestamp?, // Added
       createdAt: data['created_at'] as Timestamp?,
+
+      results: data['results'] as Map<String, dynamic>?,
     );
   }
+
 
   Map<String, dynamic> toMap() {
     return {
@@ -128,8 +139,11 @@ class SessionModel {
       'scheduled_start_time': scheduledStartTime,
       'actual_start_time': actualStartTime, // Added
       'created_at': createdAt ?? FieldValue.serverTimestamp(),
+
+      'results': results,
     };
   }
+
   
   SessionModel copyWith({String? id}) {
     return SessionModel(
@@ -156,6 +170,7 @@ class SessionModel {
       scheduledStartTime: scheduledStartTime,
       actualStartTime: actualStartTime,
       createdAt: createdAt,
+      results: results,
     );
   }
 }
