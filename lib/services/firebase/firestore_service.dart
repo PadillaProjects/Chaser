@@ -77,8 +77,7 @@ class FirestoreService {
   // --- Players ---
 
   Future<void> joinSession(String sessionId, String userId, {bool isOwner = false}) async {
-    final memberRef = _firestore.collection('session_members').doc(); 
-    // ^ note: ideally we'd use a deterministic ID like "${sessionId}_$userId" to strictly prevent duplicates
+    // note: ideally we'd use a deterministic ID like "${sessionId}_$userId" to strictly prevent duplicates
     // but a transaction query check is also fine if standardized.
     // Let's use a deterministic ID for absolute safety.
     final deterministicId = "${sessionId}_$userId";
@@ -260,6 +259,31 @@ class FirestoreService {
         });
     }
 
+    // Assign Targets (Round Robin) if Target Mode
+    if (session.gameMode == 'target') {
+        final actualRunners = <QueryDocumentSnapshot>[];
+        final actualChasers = <QueryDocumentSnapshot>[];
+        
+        for (int i = 0; i < members.length; i++) {
+           // Re-derive role based on index logic used above
+           final isChaser = i < chaserCount;
+           if (isChaser) actualChasers.add(members[i]);
+           else actualRunners.add(members[i]);
+        }
+
+        if (actualRunners.isNotEmpty && actualChasers.isNotEmpty) {
+           for (int i = 0; i < actualChasers.length; i++) {
+               final targetSnapshot = actualRunners[i % actualRunners.length];
+               // Find target userId
+               final targetUserId = targetSnapshot['user_id'];
+               
+               batch.update(actualChasers[i].reference, {
+                   'target_user_id': targetUserId,
+               });
+           }
+        }
+    }
+
     // Update Session
     final startTime = DateTime.now();
     final endTime = startTime.add(Duration(days: session.durationDays));
@@ -286,10 +310,10 @@ class FirestoreService {
       final players = membersSnap.docs.map((d) => PlayerModel.fromFirestore(d)).toList();
       
       final batch = _firestore.batch();
-      final endReason = await _runGameLogic(session, players, batch, null, null);
+      final result = await _runGameLogic(session, players, batch, null, null);
       
-      if (endReason != null) {
-          await _calculateAndSaveResults(session, players, batch, endReason);
+      if (result.endReason != null) {
+          await _calculateAndSaveResults(session, result.finalPlayers, batch, result.endReason!);
       }
       
       await batch.commit();
@@ -322,17 +346,17 @@ class FirestoreService {
       batch.update(myDocRef, {'current_distance': newDistance});
 
       // 3. Run Logic
-      final endReason = await _runGameLogic(session, players, batch, userId, newDistance);
+      final result = await _runGameLogic(session, players, batch, userId, newDistance);
       
-      if (endReason != null) {
-          await _calculateAndSaveResults(session, players, batch, endReason);
+      if (result.endReason != null) {
+          await _calculateAndSaveResults(session, result.finalPlayers, batch, result.endReason!);
       }
       
       await batch.commit();
 
   }
 
-  Future<String?> _runGameLogic(SessionModel session, List<PlayerModel> players, WriteBatch batch, String? updatingUserId, double? newDistance) async {
+  Future<GameLogicResult> _runGameLogic(SessionModel session, List<PlayerModel> players, WriteBatch batch, String? updatingUserId, double? newDistance) async {
 
       // Calculate maxChaserDistance
       double maxChaserDistance = 0;
@@ -345,10 +369,14 @@ class FirestoreService {
 
       // Variables to track game end condition
       int activeRunnerCount = 0;
-      bool captureHappened = false;
       final now = DateTime.now();
 
-      for (var p in players) {
+      // Working copy of players to track updates
+      // This is crucial because batch updates don't reflect in 'players' list immediately
+      List<PlayerModel> workingPlayers = List.from(players);
+
+      for (int i = 0; i < workingPlayers.length; i++) {
+          final p = workingPlayers[i];
           if (p.role == 'runner' && p.captureState != 'captured') { 
               // Only check ACTIVE runners
               
@@ -359,7 +387,26 @@ class FirestoreService {
               // "If the chaser has that runner difference behind or if they have greater distance"
               // Chaser >= Runner - ResistanceDistance
               // If captureResistanceDistance is 0, then Chaser >= Runner
-              bool caught = maxChaserDistance >= (runnerDist - session.captureResistanceDistance);
+              
+              bool caught = false;
+              String? catcherId;
+
+              if (session.gameMode == 'target') {
+                  // TARGET MODE: Only the assigned chaser can catch this runner
+                  // Find Chaser assigned to this runner
+                  final assignedChaser = players.where((c) => c.role == 'chaser' && c.targetUserId == p.userId).firstOrNull;
+                  
+                  if (assignedChaser != null) {
+                       double chaserDist = (updatingUserId != null && assignedChaser.userId == updatingUserId) ? newDistance! : assignedChaser.currentDistance;
+                       if (chaserDist >= (runnerDist - session.captureResistanceDistance)) {
+                           caught = true;
+                           catcherId = assignedChaser.userId;
+                       }
+                  }
+              } else {
+                  // ORIGINAL MODE: Any chaser can catch (based on max distance usually)
+                  caught = maxChaserDistance >= (runnerDist - session.captureResistanceDistance);
+              }
               
               if (caught) {
                   if (session.instantCapture) {
@@ -372,19 +419,34 @@ class FirestoreService {
                       // If the *updater* is a chaser and active, they probably did it.
                       // Else, attribute to the Chaser with max distance (leading chaser).
                       
-                      final updater = players.firstWhere((p) => p.userId == updatingUserId, orElse: () => players.first);
-                      if (updater.role == 'chaser') {
-                         capturerId = updater.userId;
-                      } else {
-                         // Find chaser with max distance
-                         double maxD = -1;
-                         for(var c in players) {
-                            if (c.role == 'chaser' && c.currentDistance > maxD) {
-                                maxD = c.currentDistance;
-                                capturerId = c.userId;
-                            }
-                         }
-                      }
+                       if (catcherId != null) {
+                          capturerId = catcherId;
+                       } else {
+                           // Existing logic for Classic Mode fallback
+                           final updater = players.firstWhere((p) => p.userId == updatingUserId, orElse: () => players.first);
+                           if (updater.role == 'chaser') {
+                              capturerId = updater.userId;
+                           } else {
+                              // Find chaser with max distance
+                              double maxD = -1;
+                              for(var c in players) {
+                                 if (c.role == 'chaser' && c.currentDistance > maxD) {
+                                     maxD = c.currentDistance;
+                                     capturerId = c.userId;
+                                 }
+                              }
+                           }
+                       }
+
+                      final newCapturedPlayer = p.copyWith(
+                          captureState: 'captured',
+                          role: 'spectator',
+                          // captureDeadline: FieldValue.delete(), // Cannot represent delete in model easily, set null
+                          capturedBy: capturerId,
+                          captureTime: Timestamp.now(),
+                      );
+                      
+                      workingPlayers[i] = newCapturedPlayer;
 
                       batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
                           'capture_state': 'captured',
@@ -393,13 +455,19 @@ class FirestoreService {
                           'captured_by': capturerId,
                           'capture_time': FieldValue.serverTimestamp(),
                       });
-                      captureHappened = true;
                       // DO NOT increment activeRunnerCount
                   } else {
                       // Resistance Time
                       if (p.captureState == 'free') {
                            // Start being chased
                            final deadline = now.add(Duration(minutes: session.captureResistanceDuration));
+                           
+                           final chasedPlayer = p.copyWith(
+                               captureState: 'being_chased',
+                               captureDeadline: Timestamp.fromDate(deadline),
+                           );
+                           workingPlayers[i] = chasedPlayer;
+
                            batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
                               'capture_state': 'being_chased',
                               'capture_deadline': Timestamp.fromDate(deadline),
@@ -413,27 +481,46 @@ class FirestoreService {
                                    // Or the one currently leading?
                                    // Simplified: Attribute to leading chaser at time of capture.
                                     String capturerId = 'unknown';
-                                     double maxD = -1;
-                                     for(var c in players) {
-                                        if (c.role == 'chaser' && c.currentDistance > maxD) {
-                                            maxD = c.currentDistance;
-                                            capturerId = c.userId;
-                                        }
+                                    
+                                     if (session.gameMode == 'target') {
+                                         final assigned = players.where((c) => c.role == 'chaser' && c.targetUserId == p.userId).firstOrNull;
+                                         if (assigned != null) capturerId = assigned.userId;
+                                     } else {
+                                         double maxD = -1;
+                                         for(var c in players) {
+                                            if (c.role == 'chaser' && c.currentDistance > maxD) {
+                                                maxD = c.currentDistance;
+                                                capturerId = c.userId;
+                                            }
+                                         }
                                      }
 
-                                   batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
+                                     final newCapturedPlayer = p.copyWith(
+                                          captureState: 'captured',
+                                          role: 'spectator',
+                                          capturedBy: capturerId,
+                                          captureTime: Timestamp.now(),
+                                     );
+                                     workingPlayers[i] = newCapturedPlayer;
+
+                                    batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
                                       'capture_state': 'captured',
                                       'role': 'spectator',
                                       'capture_deadline': FieldValue.delete(),
-                                      'captured_by': capturerId,
+                                      'captured_by': capturerId, 
                                       'capture_time': FieldValue.serverTimestamp(),
                                    });
-                                   captureHappened = true;
                                    // DO NOT increment activeRunnerCount
                           } else {
                                // Still being chased (or fix missing deadline)
                               if (p.captureDeadline == null) {
                                    final deadline = now.add(Duration(minutes: session.captureResistanceDuration));
+                                   
+                                   final updatedDeadlinePlayer = p.copyWith(
+                                      captureDeadline: Timestamp.fromDate(deadline),
+                                   );
+                                   workingPlayers[i] = updatedDeadlinePlayer;
+                                   
                                    batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
                                       'capture_deadline': Timestamp.fromDate(deadline), 
                                    });
@@ -448,6 +535,11 @@ class FirestoreService {
                   // Not Caught (Escaped or Ahead)
                   if (p.captureState == 'being_chased') {
                       // Escaped!
+                      final escapedPlayer = p.copyWith(
+                          captureState: 'free',
+                      );
+                      workingPlayers[i] = escapedPlayer;
+
                       batch.update(_firestore.collection('session_members').doc(p.sessionMemberId), {
                           'capture_state': 'free',
                           'capture_deadline': FieldValue.delete(),
@@ -459,9 +551,9 @@ class FirestoreService {
       }
       
       // If we are processing updates and it results in 0 active runners, end the game.
-      if (activeRunnerCount == 0 && players.isNotEmpty && session.status == 'active') { // Only stop if active
+      if (activeRunnerCount == 0 && workingPlayers.isNotEmpty && session.status == 'active') { // Only stop if active
            // Chasers Win (or everyone captured)
-           return 'chasers_win';
+           return GameLogicResult('chasers_win', workingPlayers);
       }
       
       // Check Time limit (Runners Win) (Only if scheduled/actual start time exists)
@@ -469,11 +561,11 @@ class FirestoreService {
       if (start != null && session.status == 'active') {
           final end = start.add(Duration(days: session.durationDays));
           if (now.isAfter(end) && activeRunnerCount > 0) {
-              return 'runners_win';
+              return GameLogicResult('runners_win', workingPlayers);
           }
       }
 
-      return null;
+      return GameLogicResult(null, workingPlayers);
   }
 
   Future<void> _calculateAndSaveResults(SessionModel session, List<PlayerModel> players, WriteBatch batch, String endReason) async {
@@ -500,7 +592,7 @@ class FirestoreService {
       // Pre-process Chaser Capture Counts for Streaks
       final chaserCaptureCounts = <String, int>{};
       for(var p in players) {
-          if (p.role == 'runner' && p.captureState == 'captured' && p.capturedBy != null) {
+          if (p.captureState == 'captured' && p.capturedBy != null) {
               chaserCaptureCounts[p.capturedBy!] = (chaserCaptureCounts[p.capturedBy!] ?? 0) + 1;
           }
       }
@@ -608,7 +700,7 @@ class FirestoreService {
               
               // Let's assume simple linear growth for streak: 1.0, 1.1, 1.2, 1.3, 1.4 (Cap)
               // Or just `1.0 + (count * 0.1)` capped at 1.4?
-              double currentStreakMult = 1.0; 
+              // double currentStreakMult = 1.0; 
               
               // Calculate points for EACH capture (if we tracked them individually we could do sequential)
               // Since we just have total count, we can simulate the sequence.
@@ -786,6 +878,7 @@ class FirestoreService {
           final sessionIds = snapshot.docs.map((d) => d['session_id'] as String).toList();
           if (sessionIds.isEmpty) return [];
 
+
           // Firestore 'in' query supports up to 10 items. 
           // If >10, we'd need to batch. For prototype, 10 is fine.
           
@@ -801,10 +894,18 @@ class FirestoreService {
                 .where(FieldPath.documentId, whereIn: chunk)
                 .get();
                 
-            sessions.addAll(sessionSnap.docs.map((d) => SessionModel.fromFirestore(d)));
+            sessions.addAll(
+                sessionSnap.docs.map((doc) => SessionModel.fromFirestore(doc))
+            );
           }
           
           return sessions;
         });
   }
+}
+
+class GameLogicResult {
+  final String? endReason;
+  final List<PlayerModel> finalPlayers;
+  GameLogicResult(this.endReason, this.finalPlayers);
 }

@@ -14,6 +14,7 @@ class PlayerModel {
   final Timestamp? joinedAt; 
   final String? capturedBy; 
   final Timestamp? captureTime; 
+  final String? targetUserId; // For Target Mode
 
   PlayerModel({
     required this.sessionMemberId,
@@ -29,6 +30,7 @@ class PlayerModel {
     this.captureDeadline,
     this.capturedBy,
     this.captureTime,
+    this.targetUserId,
   });
 
   factory PlayerModel.fromFirestore(DocumentSnapshot doc) {
@@ -47,6 +49,7 @@ class PlayerModel {
       captureDeadline: data['capture_deadline'] as Timestamp?,
       capturedBy: data['captured_by'] as String?,
       captureTime: data['capture_time'] as Timestamp?,
+      targetUserId: data['target_user_id'] as String?,
     );
   }
 
@@ -64,6 +67,41 @@ class PlayerModel {
       'capture_deadline': captureDeadline,
       'captured_by': capturedBy,
       'capture_time': captureTime,
+      'target_user_id': targetUserId,
     };
+  }
+
+  PlayerModel copyWith({
+    String? sessionMemberId,
+    String? sessionId,
+    String? userId,
+    String? role,
+    bool? isOwner,
+    bool? readyStatus,
+    double? currentDistance,
+    int? totalSteps,
+    String? captureState,
+    Timestamp? captureDeadline,
+    Timestamp? joinedAt,
+    String? capturedBy,
+    Timestamp? captureTime,
+    String? targetUserId,
+  }) {
+    return PlayerModel(
+      sessionMemberId: sessionMemberId ?? this.sessionMemberId,
+      sessionId: sessionId ?? this.sessionId,
+      userId: userId ?? this.userId,
+      role: role ?? this.role,
+      isOwner: isOwner ?? this.isOwner,
+      readyStatus: readyStatus ?? this.readyStatus,
+      currentDistance: currentDistance ?? this.currentDistance,
+      totalSteps: totalSteps ?? this.totalSteps,
+      captureState: captureState ?? this.captureState,
+      captureDeadline: captureDeadline ?? this.captureDeadline,
+      joinedAt: joinedAt ?? this.joinedAt,
+      capturedBy: capturedBy ?? this.capturedBy,
+      captureTime: captureTime ?? this.captureTime,
+      targetUserId: targetUserId ?? this.targetUserId,
+    );
   }
 }
