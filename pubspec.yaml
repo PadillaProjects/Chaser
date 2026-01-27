@@ -44,7 +44,7 @@ dependencies:
   firebase_messaging: ^16.1.1
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  health: ^13.2.1
+  cm_pedometer: ^1.2.0
   connectivity_plus: ^7.0.0
   rxdart: ^0.28.0
   google_sign_in: ^6.2.1

@@ -3,6 +3,7 @@ import 'package:chaser/models/player.dart';
 import 'package:chaser/models/player_profile.dart'; // Added
 import 'package:chaser/models/session.dart';
 import 'package:chaser/screens/session/edit_session_sheet.dart';
+import 'package:chaser/services/pedometer_service.dart';
 import 'package:chaser/services/firebase/auth_service.dart';
 import 'package:chaser/services/firebase/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -26,6 +27,15 @@ final userProfileFamily = StreamProvider.family<UserProfile, String>((ref, Strin
 final otherPlayerProfileFamily = StreamProvider.family<PlayerProfile?, String>((ref, String userId) {
    return FirestoreService().watchPlayerProfile(userId);
 });
+
+class LocalDistanceNotifier extends Notifier<double?> {
+  @override
+  double? build() => null;
+
+  void update(double dist) => state = dist;
+}
+
+final localDistanceProvider = NotifierProvider<LocalDistanceNotifier, double?>(LocalDistanceNotifier.new);
 
 class SessionDetailScreen extends ConsumerStatefulWidget {
   final String sessionId;
@@ -271,9 +281,20 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                           sessionId: widget.sessionId,
                           players: players,
                         ),
+                        // Distance Monitor: Tracks distance for current user
+                        if (session.status == 'active' && 
+                            // Only track if game has started
+                            (session.actualStartTime != null || session.scheduledStartTime != null))
+                          _DistanceMonitor(
+                            sessionId: widget.sessionId,
+                            userId: currentUser?.uid,
+                            startTime: session.actualStartTime?.toDate() ?? session.scheduledStartTime?.toDate() ?? DateTime.now(),
+                            baseOffset: (myPlayer?.role == 'runner') ? session.headstartDistance : 0.0,
+                          ),
                         Column(
                           children: [
-                            if (showCaptureWarning)
+                            if (showCaptureWarning) 
+
                               Container(
                                 color: Colors.red.withOpacity(0.1),
                                 padding: const EdgeInsets.all(12),
@@ -519,6 +540,15 @@ class SessionPlayerTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userProfileAsync = ref.watch(userProfileFamily(userId));
+    final localDist = ref.watch(localDistanceProvider);
+    final currentUser = AuthService().currentUser;
+    final isMe = currentUser?.uid == userId;
+
+    // Determine effective distance to show
+    double effectiveDistance = currentDistance;
+    if (isMe && localDist != null) {
+        effectiveDistance = localDist;
+    }
     
     return userProfileAsync.when(
       data: (user) {
@@ -531,11 +561,11 @@ class SessionPlayerTile extends ConsumerWidget {
           subtitle: Row(
             children: [
                 Text(role),
-                if (currentDistance >= 0) ...[
+                if (effectiveDistance >= 0) ...[
                     const SizedBox(width: 8),
                     Container(width: 1, height: 12, color: Colors.grey),
                     const SizedBox(width: 8),
-                    Text('${currentDistance.toStringAsFixed(0)}m', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('${effectiveDistance.toStringAsFixed(0)}m', style: const TextStyle(fontWeight: FontWeight.bold)),
                 ]
             ],
           ),
@@ -878,5 +908,117 @@ class _ChaserCaptureStatus extends ConsumerWidget {
           ],
         ),
       );
+  }
+}
+
+
+
+class _DistanceMonitor extends ConsumerStatefulWidget {
+  final String sessionId;
+  final String? userId; // Nullable to handle loading/auth states gracefully
+  final DateTime startTime;
+  final double baseOffset;
+
+  const _DistanceMonitor({
+    required this.sessionId,
+    required this.userId,
+    required this.startTime,
+    this.baseOffset = 0.0,
+    super.key,
+  });
+
+  @override
+  ConsumerState<_DistanceMonitor> createState() => _DistanceMonitorState();
+}
+
+class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
+  final PedometerService _pedometerService = PedometerService();
+  Timer? _timer;
+  StreamSubscription? _subscription;
+  bool _hasPermissions = false;
+  
+  double _currentTotalDistance = 0.0;
+  double _lastStoredDistance = -20.0; // Init to allow first write (0 - (-20) > 10)
+
+  @override
+  void initState() {
+    super.initState();
+    _initPedometer();
+  }
+
+  Future<void> _initPedometer() async {
+    _hasPermissions = await _pedometerService.requestPermissions();
+    if (_hasPermissions && mounted) {
+      // 1. Start Stream for live local updates (no write)
+      _subscription = _pedometerService.getPedometerStream(widget.startTime).listen((data) {
+          try {
+             final dynamic distVal = data.distance;
+             if (distVal != null && distVal is num) {
+                 final double pedometerDist = distVal.toDouble();
+                 if (mounted) {
+                   final total = widget.baseOffset + pedometerDist;
+                   setState(() {
+                     _currentTotalDistance = total;
+                   });
+                   // Update provider for optimistic UI
+                   ref.read(localDistanceProvider.notifier).update(total);
+                 }
+                 // debugPrint("DistanceMonitor: Stream Update - Local Total: $_currentTotalDistance");
+             }
+          } catch (e) {
+             debugPrint("DistanceMonitor: Stream Processing Error: $e");
+          }
+      }, onError: (e) {
+          debugPrint("DistanceMonitor: Stream Error: $e");
+      });
+
+      // 2. Periodic timer checks for significant changes to write
+      _timer = Timer.periodic(const Duration(seconds: 10), _checkAndWriteDistance);
+      
+      // Initial check
+      _checkAndWriteDistance(null);
+    }
+  }
+
+  Future<void> _checkAndWriteDistance(Timer? t) async {
+    if (widget.userId == null) return;
+    
+    // 1. Poll to ensure we have the absolute latest (sync with stream)
+    try {
+        final double pedometerDist = await _pedometerService.getDistance(widget.startTime, DateTime.now());
+        if (mounted) {
+           _currentTotalDistance = widget.baseOffset + pedometerDist;
+        }
+    } catch (e) {
+        debugPrint("DistanceMonitor: Poll Error: $e");
+    }
+
+    // 2. Check threshold
+    final double diff = (_currentTotalDistance - _lastStoredDistance).abs();
+    
+    if (diff > 10.0) {
+        debugPrint("DistanceMonitor: Threshold met (Diff: ${diff.toStringAsFixed(1)}m). Writing: ${_currentTotalDistance.toStringAsFixed(1)}m");
+        await _updateFirestore(_currentTotalDistance);
+        _lastStoredDistance = _currentTotalDistance;
+    } else {
+        // debugPrint("DistanceMonitor: Threshold not met (Diff: ${diff.toStringAsFixed(1)}m). Skipping write.");
+    }
+  }
+
+  Future<void> _updateFirestore(double dist) async {
+    if (widget.userId == null || !mounted) return;
+    await FirestoreService().updatePlayerDistance(widget.sessionId, widget.userId!, dist);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.shrink(); 
   }
 }
