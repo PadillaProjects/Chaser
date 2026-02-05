@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:chaser/config/colors.dart';
 import 'package:chaser/models/player.dart';
 import 'package:chaser/models/player_profile.dart';
@@ -14,6 +15,7 @@ import 'package:chaser/models/user_profile.dart';
 import 'package:go_router/go_router.dart';
 import 'package:chaser/screens/session/game_results_view.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:chaser/widgets/session/distance_track_widget.dart';
 
 final sessionStreamProvider = StreamProvider.family((ref, String sessionId) {
   return FirestoreService().watchSession(sessionId);
@@ -139,6 +141,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
     final sessionAsync = ref.watch(sessionStreamProvider(widget.sessionId));
     final playersAsync = ref.watch(playersStreamProvider(widget.sessionId));
     final currentUser = AuthService().currentUser;
+    final localDist = ref.watch(localDistanceProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -154,6 +157,19 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Settings button for active games (read-only view)
+                  if (session.status == 'active')
+                    IconButton(
+                      icon: const Icon(Icons.info_outline, color: AppColors.textSecondary),
+                      tooltip: 'Game Rules',
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          backgroundColor: AppColors.fogGrey,
+                          builder: (context) => _GameRulesSheet(session: session),
+                        );
+                      },
+                    ),
                   if (session.status == 'pending')
                     IconButton(
                       icon: const Icon(Icons.exit_to_app, color: AppColors.bloodRed),
@@ -194,6 +210,12 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               );
           }
 
+          // Different layouts for pending vs active games
+          if (session.status == 'active') {
+            return _buildActiveGameView(session, currentUser, playersAsync, localDist);
+          }
+          
+          // Pending game layout (original)
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -212,30 +234,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        _buildStatusChip(session.status),
-                        if (session.status == 'active' && _isheadstartActive(session))
-                             Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                color: AppColors.warningYellow.withOpacity(0.2),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.timer, size: 16, color: AppColors.warningYellow),
-                                    const SizedBox(width: 4),
-                                    _HeadstartTimer(
-                                        endTime: (session.actualStartTime?.toDate() ??
-                                                 session.scheduledStartTime?.toDate() ??
-                                                 DateTime.now())
-                                                .add(Duration(minutes: session.headstartDuration)),
-                                    ),
-                                  ],
-                                ),
-                            ),
-                      ],
-                    ),
+                    _buildStatusChip(session.status),
                     const SizedBox(height: 12),
                     Text(
                       '${session.gameMode.toUpperCase()} • ${session.durationDays} DAYS',
@@ -245,7 +244,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                         letterSpacing: 2,
                       ),
                     ),
-                    if (session.status == 'pending' && session.joinCode != null) ...[
+                    if (session.joinCode != null) ...[
                        const SizedBox(height: 16),
                        Container(
                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -365,57 +364,18 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                       );
                     }
 
-                    final myPlayer = players.where((p) => p.userId == currentUser?.uid).firstOrNull;
-                    final showCaptureWarning = myPlayer?.captureState == 'being_chased' && myPlayer?.captureDeadline != null;
-
-                    final isChaser = myPlayer?.role == 'chaser';
-                    final victims = players.where((p) => p.role == 'runner' && p.captureState == 'being_chased' && p.captureDeadline != null).toList();
-                    final showChaserStatus = isChaser && victims.isNotEmpty;
-
-                    return Stack(
-                      children: [
-                        _GameLoopMonitor(
+                    return ListView.builder(
+                      itemCount: players.length,
+                      itemBuilder: (context, index) {
+                        final player = players[index];
+                        return SessionPlayerTile(
                           sessionId: widget.sessionId,
-                          players: players,
-                        ),
-                        if (session.status == 'active' &&
-                            (session.actualStartTime != null || session.scheduledStartTime != null))
-                          _DistanceMonitor(
-                            sessionId: widget.sessionId,
-                            userId: currentUser?.uid,
-                            startTime: session.actualStartTime?.toDate() ?? session.scheduledStartTime?.toDate() ?? DateTime.now(),
-                            baseOffset: (myPlayer?.role == 'runner') ? session.headstartDistance : 0.0,
-                          ),
-                        Column(
-                          children: [
-                            if (showCaptureWarning)
-                              _CaptureWarningPanel(
-                                player: myPlayer!,
-                                sessionId: widget.sessionId,
-                              ),
-                             if (showChaserStatus)
-                               _ChaserCaptureStatus(
-                                 victims: victims,
-                                 sessionId: widget.sessionId,
-                               ),
-                            Expanded(
-                              child: ListView.builder(
-                                itemCount: players.length,
-                                itemBuilder: (context, index) {
-                                  final player = players[index];
-                                  return SessionPlayerTile(
-                                    sessionId: widget.sessionId,
-                                    userId: player.userId,
-                                    role: player.role,
-                                    isOwner: player.isOwner,
-                                    currentDistance: player.currentDistance,
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                          userId: player.userId,
+                          role: player.role,
+                          isOwner: player.isOwner,
+                          currentDistance: player.currentDistance,
+                        );
+                      },
                     );
                   },
                 ),
@@ -469,6 +429,195 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
           letterSpacing: 2,
         ),
       ),
+    );
+  }
+
+  Widget _buildActiveGameView(
+    SessionModel session,
+    User? currentUser,
+    AsyncValue<List<PlayerModel>> playersAsync,
+    double? localDist,
+  ) {
+    return playersAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
+      error: (e, s) => Center(
+        child: Text('Error loading players: $e', style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed)),
+      ),
+      data: (players) {
+        final myPlayer = players.where((p) => p.userId == currentUser?.uid).firstOrNull;
+        final runnersLeft = players.where((p) => p.role == 'runner' && p.captureState != 'captured').length;
+        final showCaptureWarning = myPlayer?.captureState == 'being_chased' && myPlayer?.captureDeadline != null;
+        final isChaser = myPlayer?.role == 'chaser';
+        final victims = players.where((p) => p.role == 'runner' && p.captureState == 'being_chased' && p.captureDeadline != null).toList();
+        final showChaserStatus = isChaser && victims.isNotEmpty;
+
+        return Stack(
+          children: [
+            _GameLoopMonitor(
+              sessionId: widget.sessionId,
+              players: players,
+            ),
+            if (session.actualStartTime != null || session.scheduledStartTime != null)
+              _DistanceMonitor(
+                sessionId: widget.sessionId,
+                userId: currentUser?.uid,
+                startTime: session.actualStartTime?.toDate() ?? session.scheduledStartTime?.toDate() ?? DateTime.now(),
+                baseOffset: (myPlayer?.role == 'runner') ? session.headstartDistance : 0.0,
+              ),
+            Column(
+              children: [
+                // Game Stats Header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  color: AppColors.fogGrey,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      // Time Remaining
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.timer, color: AppColors.warningYellow, size: 18),
+                              const SizedBox(width: 6),
+                              _GameEndTimer(
+                                endTime: (session.actualStartTime?.toDate() ?? DateTime.now())
+                                    .add(Duration(days: session.durationDays)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'TIME LEFT',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9,
+                              color: AppColors.textMuted,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Headstart Timer (if active)
+                      if (_isheadstartActive(session))
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.run_circle, color: AppColors.pulseBlue, size: 18),
+                                const SizedBox(width: 6),
+                                _HeadstartTimer(
+                                  endTime: (session.actualStartTime?.toDate() ??
+                                           session.scheduledStartTime?.toDate() ??
+                                           DateTime.now())
+                                          .add(Duration(minutes: session.headstartDuration)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'HEADSTART',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9,
+                                color: AppColors.textMuted,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      // Runners Left
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.directions_run, color: AppColors.pulseBlue, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                '$runnersLeft',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.toxicGreen,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'RUNNERS',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9,
+                              color: AppColors.textMuted,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Capture Warnings
+                if (showCaptureWarning)
+                  _CaptureWarningPanel(
+                    player: myPlayer!,
+                    sessionId: widget.sessionId,
+                  ),
+                if (showChaserStatus)
+                  _ChaserCaptureStatus(
+                    victims: victims,
+                    sessionId: widget.sessionId,
+                  ),
+                
+                // Distance Track (expanded main area)
+                Expanded(
+                  child: DistanceTrackWidget(
+                    sessionId: widget.sessionId,
+                    players: players,
+                    currentUserId: currentUser?.uid,
+                    localDistance: localDist,
+                  ),
+                ),
+                
+                // Collapsible Player List
+                Container(
+                  color: AppColors.fogGrey,
+                  child: ExpansionTile(
+                    title: Text(
+                      'PLAYERS (${players.length})',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.ghostWhite,
+                        letterSpacing: 2,
+                        fontSize: 12,
+                      ),
+                    ),
+                    leading: const Icon(Icons.people, color: AppColors.bloodRed, size: 20),
+                    collapsedIconColor: AppColors.textSecondary,
+                    iconColor: AppColors.bloodRed,
+                    initiallyExpanded: false,
+                    children: players.map((player) => SessionPlayerTile(
+                      sessionId: widget.sessionId,
+                      userId: player.userId,
+                      role: player.role,
+                      isOwner: player.isOwner,
+                      currentDistance: player.currentDistance,
+                    )).toList(),
+                  ),
+                ),
+                
+                // Action Buttons
+                _buildActionButtons(session, currentUser?.uid),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1122,6 +1271,172 @@ class _HeadstartTimerState extends State<_HeadstartTimer> {
             }
         );
     }
+}
+
+// Game End Timer - shows days/hours/minutes remaining
+class _GameEndTimer extends StatefulWidget {
+    final DateTime endTime;
+
+    const _GameEndTimer({required this.endTime, Key? key}) : super(key: key);
+
+    @override
+    State<_GameEndTimer> createState() => _GameEndTimerState();
+}
+
+class _GameEndTimerState extends State<_GameEndTimer> {
+    late Stream<int> _timer;
+
+    @override
+    void initState() {
+        super.initState();
+        _timer = Stream.periodic(const Duration(minutes: 1), (x) => x);
+    }
+
+    @override
+    Widget build(BuildContext context) {
+        return StreamBuilder<int>(
+            stream: _timer,
+            builder: (context, snapshot) {
+                final now = DateTime.now();
+                final remaining = widget.endTime.difference(now);
+
+                if (remaining.isNegative) {
+                    return Text(
+                      'ENDED',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.bloodRed,
+                        fontSize: 14,
+                      ),
+                    );
+                }
+
+                final days = remaining.inDays;
+                final hours = remaining.inHours % 24;
+                final mins = remaining.inMinutes % 60;
+
+                String timeStr;
+                if (days > 0) {
+                  timeStr = '${days}d ${hours}h';
+                } else if (hours > 0) {
+                  timeStr = '${hours}h ${mins}m';
+                } else {
+                  timeStr = '${mins}m';
+                }
+
+                return Text(
+                  timeStr,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.warningYellow,
+                    fontSize: 14,
+                  ),
+                );
+            }
+        );
+    }
+}
+
+// Game Rules Sheet - Read-only view of game rules
+class _GameRulesSheet extends StatelessWidget {
+  final SessionModel session;
+
+  const _GameRulesSheet({required this.session});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.info_outline, color: AppColors.bloodRed),
+              const SizedBox(width: 12),
+              Text(
+                'HUNT RULES',
+                style: GoogleFonts.creepster(
+                  fontSize: 24,
+                  color: AppColors.ghostWhite,
+                  letterSpacing: 2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(color: AppColors.textMuted),
+          _buildRuleRow(
+            Icons.calendar_today,
+            'Duration',
+            '${session.durationDays} days',
+            AppColors.warningYellow,
+          ),
+          _buildRuleRow(
+            Icons.run_circle_outlined,
+            'Headstart',
+            '${session.headstartDistance.toInt()}m (${session.headstartDuration} min)',
+            AppColors.pulseBlue,
+          ),
+          if (session.restStartHour != session.restEndHour)
+            _buildRuleRow(
+              Icons.bedtime_outlined,
+              'Rest Hours',
+              '${session.restStartHour}:00 - ${session.restEndHour}:00',
+              AppColors.textSecondary,
+            ),
+          _buildRuleRow(
+            Icons.touch_app_outlined,
+            'Capture',
+            session.instantCapture ? 'Instant Kill' : 'Resist ${session.captureResistanceDuration}min',
+            AppColors.bloodRed,
+          ),
+          if (session.gameMode == 'target')
+            _buildRuleRow(
+              Icons.swap_horiz,
+              'Switch Cooldown',
+              '${session.switchCooldown} min',
+              AppColors.warningYellow,
+            ),
+          _buildRuleRow(
+            Icons.videogame_asset,
+            'Game Mode',
+            session.gameMode.toUpperCase(),
+            AppColors.toxicGreen,
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRuleRow(IconData icon, String label, String value, Color iconColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: iconColor, size: 20),
+          const SizedBox(width: 12),
+          Text(
+            '$label: ',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: AppColors.ghostWhite,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _CaptureTimer extends StatefulWidget {

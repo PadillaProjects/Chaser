@@ -9,17 +9,16 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-final authStateProvider = StreamProvider<User?>((ref) {
-  return AuthService().authStateChanges;
-});
+import 'package:chaser/character/widgets/character_avatar.dart';
+import 'package:chaser/providers/user_provider.dart';
 
-final userSessionsProvider = StreamProvider((ref) {
-  final authState = ref.watch(authStateProvider);
-  final user = authState.value;
+// ... (imports)
 
-  if (user == null) return const Stream<List<SessionModel>>.empty();
-  return FirestoreService().watchUserSessions(user.uid);
-});
+// Remove local definition of authStateProvider since we moved it to user_provider.dart
+// But wait, HomeScreen defines userSessionsProvider which depends on authStateProvider.
+// I should update userSessionsProvider to use the one from user_provider.dart or just leave it if names collide.
+// Actually, looking at the code, I can just import user_provider.dart and remove the local authStateProvider definition.
+// But userSessionsProvider is defined in this file too. I should update it to use the import.
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -29,211 +28,269 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      debugPrint("HomeScreen: Requesting Pedometer Permissions...");
-      final success = await PedometerService().requestPermissions();
-      debugPrint("HomeScreen: Permissions request result: $success");
-    });
-  }
+  // ... initState ...
 
   @override
   Widget build(BuildContext context) {
     final sessionsAsync = ref.watch(userSessionsProvider);
+    final userProfileAsync = ref.watch(userProfileProvider);
 
     return Scaffold(
+      backgroundColor: AppColors.voidBlack,
       appBar: AppBar(
         title: Text(
-          'ACTIVE HUNTS',
+          'CHASER',
           style: GoogleFonts.creepster(
-            fontSize: 24,
-            letterSpacing: 2,
-            color: AppColors.ghostWhite,
+            fontSize: 28,
+            letterSpacing: 4,
+            color: AppColors.bloodRed,
+            shadows: [Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 10)],
           ),
         ),
+        centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.person_outline, color: AppColors.bloodRed),
-            onPressed: () => context.push('/profile'),
-          ),
+             IconButton(
+              icon: const Icon(Icons.settings, color: AppColors.textMuted),
+              onPressed: () => context.push('/profile'), 
+            ),
         ],
       ),
-      body: sessionsAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: AppColors.bloodRed),
-        ),
-        error: (err, stack) => Center(
-          child: Text(
-            'Error: $err',
-            style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed),
+      body: Column(
+        children: [
+          // --- TOP HALF: CHARACTER ---
+          Expanded(
+            flex: 4,
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: AppColors.voidBlack,
+                border: Border(bottom: BorderSide(color: AppColors.bloodRed.withOpacity(0.3))),
+                boxShadow: [
+                  BoxShadow(color: AppColors.bloodRed.withOpacity(0.1), blurRadius: 20, spreadRadius: 5),
+                ],
+              ),
+              child: userProfileAsync.when(
+                data: (profile) => profile != null
+                    ? LayoutBuilder(
+                        builder: (context, constraints) {
+                          // Calculate character size to fit with room for text below
+                          final availableHeight = constraints.maxHeight;
+                          final charSize = (availableHeight * 0.55).clamp(100.0, 180.0);
+                          
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Character with glow
+                              GestureDetector(
+                                onTap: () => context.push('/customize'),
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    // Glow effect behind
+                                    Container(
+                                      width: charSize * 0.9,
+                                      height: charSize * 0.9,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(color: AppColors.pulseBlue.withOpacity(0.2), blurRadius: 50, spreadRadius: 10),
+                                        ],
+                                      ),
+                                    ),
+                                    CharacterAvatar(profile: profile.character, size: charSize),
+                                  ],
+                                ),
+                              ),
+                              
+                              const SizedBox(height: 8),
+                              
+                              // Level & XP Display
+                              Text(
+                                'LEVEL ${profile.level}',
+                                style: GoogleFonts.creepster(
+                                  fontSize: 18,
+                                  color: AppColors.ghostWhite,
+                                  letterSpacing: 2,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              // XP Progress bar
+                              Container(
+                                width: 120,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: AppColors.fogGrey,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: FractionallySizedBox(
+                                  alignment: Alignment.centerLeft,
+                                  widthFactor: profile.xpProgress,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: AppColors.pulseBlue,
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${profile.currentXp}/${profile.xpForNextLevel} XP',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              
+                              const SizedBox(height: 12),
+                              
+                              // Customize Button
+                              FilledButton.icon(
+                                onPressed: () => context.push('/customize'),
+                                icon: const Icon(Icons.edit, size: 16),
+                                label: Text('CUSTOMIZE', style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold)),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.bloodRed.withOpacity(0.2),
+                                  foregroundColor: AppColors.bloodRed,
+                                  side: BorderSide(color: AppColors.bloodRed),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      )
+                    : const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
+                loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
+                error: (e, _) => Center(child: Icon(Icons.error, color: AppColors.bloodRed)),
+              ),
+            ),
           ),
-        ),
-        data: (sessions) {
-          if (sessions.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.visibility_off,
-                    size: 64,
-                    color: AppColors.textMuted.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'NO HUNTS ACTIVE',
-                    style: GoogleFonts.creepster(
-                      fontSize: 24,
-                      color: AppColors.textSecondary,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Create a kill zone.',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 14,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  Container(
-                    decoration: BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.bloodRed.withOpacity(0.4),
-                          blurRadius: 20,
-                          spreadRadius: -5,
-                        ),
-                      ],
-                    ),
-                    child: FilledButton.icon(
-                      onPressed: () => context.push('/create-session'),
-                      icon: const Icon(Icons.add),
-                      label: Text(
-                        'BEGIN A HUNT',
+
+          // --- BOTTOM HALF: SESSIONS ---
+          Expanded(
+            flex: 5,
+            child: Column(
+              children: [
+                // Section Header
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  color: AppColors.fogGrey,
+                  child: Row(
+                    children: [
+                      Icon(Icons.radar, size: 16, color: AppColors.textSecondary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'ACTIVE ZONES',
                         style: GoogleFonts.jetBrainsMono(
+                          color: AppColors.textSecondary,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 2,
                         ),
                       ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.bloodRed,
-                        foregroundColor: AppColors.ghostWhite,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                      ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: () => _showJoinDialog(context),
-                    icon: const Icon(Icons.login),
-                    label: Text(
-                      'ENTER THE ZONE',
-                      style: GoogleFonts.jetBrainsMono(
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.ghostWhite,
-                      side: const BorderSide(color: AppColors.ghostWhite),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: sessions.length,
-            itemBuilder: (context, index) {
-              final session = sessions[index];
-              final isActive = session.status == 'active';
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.fogGrey,
-                  border: Border(
-                    left: BorderSide(
-                      color: isActive ? AppColors.bloodRed : AppColors.textMuted,
-                      width: 4,
-                    ),
-                  ),
-                  boxShadow: isActive
-                      ? [
-                          BoxShadow(
-                            color: AppColors.bloodRed.withOpacity(0.2),
-                            blurRadius: 10,
-                            spreadRadius: -2,
-                          ),
-                        ]
-                      : null,
                 ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  title: Text(
-                    session.name.toUpperCase(),
-                    style: GoogleFonts.jetBrainsMono(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.ghostWhite,
-                      letterSpacing: 1,
+                
+                // List
+                Expanded(
+                  child: sessionsAsync.when(
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(color: AppColors.bloodRed),
                     ),
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.people_outline,
-                          size: 14,
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${session.memberCount} Prey',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
+                    error: (err, stack) => Center(
+                      child: Text(
+                        'Error: $err',
+                        style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed),
+                      ),
+                    ),
+                    data: (sessions) {
+                      if (sessions.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.visibility_off,
+                                size: 48,
+                                color: AppColors.textMuted.withOpacity(0.5),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'NO ACTIVE HUNTS',
+                                style: GoogleFonts.jetBrainsMono(
+                                  color: AppColors.textMuted,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              // Small CTA since FAB handles main creation
+                               OutlinedButton(
+                                onPressed: () => context.push('/create-session'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.textSecondary,
+                                  side: BorderSide(color: AppColors.textSecondary),
+                                ),
+                                child: const Text('CREATE ZONE'),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          color: isActive
-                              ? AppColors.bloodRed.withOpacity(0.2)
-                              : AppColors.textMuted.withOpacity(0.2),
-                          child: Text(
-                            isActive ? 'HUNTING' : session.status.toUpperCase(),
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: isActive ? AppColors.bloodRed : AppColors.textSecondary,
-                              letterSpacing: 1,
+                        );
+                      }
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: sessions.length,
+                        itemBuilder: (context, index) {
+                          final session = sessions[index];
+                          final isActive = session.status == 'active';
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.fogGrey,
+                              border: Border(
+                                left: BorderSide(
+                                  color: isActive ? AppColors.bloodRed : AppColors.textMuted,
+                                  width: 4,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              title: Text(
+                                session.name.toUpperCase(),
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.ghostWhite,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '${session.memberCount} Players • ${isActive ? 'HUNTING' : 'PENDING'}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 12,
+                                  color: isActive ? AppColors.bloodRed : AppColors.textSecondary,
+                                ),
+                              ),
+                              trailing: Icon(
+                                Icons.chevron_right,
+                                color: isActive ? AppColors.bloodRed : AppColors.textMuted,
+                              ),
+                              onTap: () => context.push('/session/${session.id}'),
+                            ),
+                          );
+                        },
+                      );
+                    },
                   ),
-                  trailing: Icon(
-                    Icons.chevron_right,
-                    color: isActive ? AppColors.bloodRed : AppColors.textMuted,
-                  ),
-                  onTap: () => context.push('/session/${session.id}'),
                 ),
-              );
-            },
-          );
-        },
+              ],
+            ),
+          ),
+        ],
       ),
+
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

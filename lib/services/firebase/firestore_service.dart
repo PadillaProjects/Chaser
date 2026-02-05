@@ -4,6 +4,7 @@ import 'package:chaser/models/player_profile.dart'; // Added
 import 'package:chaser/models/session.dart';
 import 'package:chaser/models/user_profile.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../models/character/character_profile.dart'; // Added import
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -66,6 +67,13 @@ class FirestoreService {
             return UserProfile.fromFirestore(doc);
         });
   }
+
+  Future<void> updateCharacterProfile(String userId, CharacterProfile profile) async {
+    await _firestore.collection('users').doc(userId).update({
+      'character': profile.toMap(),
+    });
+  }
+
   
   Stream<PlayerProfile?> watchPlayerProfile(String userId) {
       return _firestore.collection('player_profiles').doc(userId).snapshots().map((doc) {
