@@ -104,44 +104,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               
                               const SizedBox(height: 8),
                               
-                              // Level & XP Display
-                              Text(
-                                'LEVEL ${profile.level}',
-                                style: GoogleFonts.creepster(
-                                  fontSize: 18,
-                                  color: AppColors.ghostWhite,
-                                  letterSpacing: 2,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              // XP Progress bar
-                              Container(
-                                width: 120,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: AppColors.fogGrey,
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                                child: FractionallySizedBox(
-                                  alignment: Alignment.centerLeft,
-                                  widthFactor: profile.xpProgress,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: AppColors.pulseBlue,
-                                      borderRadius: BorderRadius.circular(3),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${profile.currentXp}/${profile.xpForNextLevel} XP',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                              
+
                               const SizedBox(height: 12),
                               
                               // Customize Button

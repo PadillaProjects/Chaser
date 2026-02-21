@@ -1111,7 +1111,7 @@ class SessionPlayerTile extends ConsumerWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                    _statRow('Level', '${stats.level}'),
+
                                     _statRow('Games Played', '${stats.totalGamesPlayed}'),
                                     _statRow('Wins', '${stats.totalWins}'),
                                     _statRow('Captures', '${stats.totalCaptures}'),

@@ -1,11 +1,9 @@
 import 'package:chaser/config/colors.dart';
-import 'package:chaser/models/player_profile.dart';
 import 'package:chaser/models/session.dart';
-import 'package:chaser/screens/session/session_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'dart:math';
+
 
 class GameResultsView extends ConsumerStatefulWidget {
   final SessionModel session;
@@ -23,33 +21,12 @@ class GameResultsView extends ConsumerStatefulWidget {
   ConsumerState<GameResultsView> createState() => _GameResultsViewState();
 }
 
-class _GameResultsViewState extends ConsumerState<GameResultsView> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _xpAnimation;
+class _GameResultsViewState extends ConsumerState<GameResultsView> {
 
   Map<String, dynamic>? get _myResult => widget.session.results?['player_results']?[widget.currentUserId];
   String get _winnerRole => widget.session.results?['winner_role'] ?? 'none';
   bool get _didIWin => _myResult?['outcome'] == 'won';
-  int get _xpEarned => _myResult?['xp_earned'] ?? 0;
-  int get _oldLevel => _myResult?['old_level'] ?? 1;
-  int get _newLevel => _myResult?['new_level'] ?? 1;
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2));
-    _xpAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _controller.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -204,148 +181,6 @@ class _GameResultsViewState extends ConsumerState<GameResultsView> with SingleTi
                 ),
               ),
 
-              // Rewards Section
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Container(width: 4, height: 16, color: AppColors.pulseBlue),
-                    const SizedBox(width: 8),
-                    Text(
-                      'REWARDS',
-                      style: GoogleFonts.creepster(
-                        fontSize: 20,
-                        color: AppColors.ghostWhite,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // XP Earned Card
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.fogGrey,
-                  border: Border.all(color: AppColors.pulseBlue.withOpacity(0.5)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.auto_awesome,
-                      color: AppColors.pulseBlue,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    AnimatedBuilder(
-                      animation: _xpAnimation,
-                      builder: (context, child) {
-                        final displayXp = (_xpEarned * _xpAnimation.value).round();
-                        return Text(
-                          '+$displayXp XP',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.pulseBlue,
-                            shadows: [
-                              Shadow(
-                                color: AppColors.pulseBlue.withOpacity(0.5),
-                                blurRadius: 10,
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-
-              // Points Breakdown
-              if (_myResult?['breakdown'] != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding: const EdgeInsets.all(16),
-                  color: AppColors.fogGrey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'BREAKDOWN',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ...(_myResult!['breakdown'] as Map<String, dynamic>).entries.map((e) {
-                        String label = e.key.replaceAll('_', ' ').toUpperCase();
-                        String value = e.value.toString();
-                        if (e.value is double) value = (e.value as double).toStringAsFixed(1);
-
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                label,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 12,
-                                  color: AppColors.textMuted,
-                                ),
-                              ),
-                              Text(
-                                value,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.ghostWhite,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ],
-
-              // Level Progress Section
-              const SizedBox(height: 24),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Container(width: 4, height: 16, color: AppColors.warningYellow),
-                    const SizedBox(width: 8),
-                    Text(
-                      'LEVEL PROGRESS',
-                      style: GoogleFonts.creepster(
-                        fontSize: 20,
-                        color: AppColors.ghostWhite,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.all(16),
-                color: AppColors.fogGrey,
-                child: _buildLevelProgress(),
-              ),
-
               // Dismiss Button
               const SizedBox(height: 32),
               Padding(
@@ -372,106 +207,6 @@ class _GameResultsViewState extends ConsumerState<GameResultsView> with SingleTi
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildLevelProgress() {
-    int currentLevel = _newLevel;
-    int startXP = PlayerProfile.cumulativeXpForLevel(currentLevel);
-    int xpNeeded = (100 * pow(1.1, currentLevel - 1)).round();
-    int currentTotalXP = _myResult?['new_total_xp'] ?? 0;
-    int xpInLevel = currentTotalXP - startXP;
-    if (xpInLevel < 0) xpInLevel = 0;
-
-    double progress = 0.0;
-    if (xpNeeded > 0) {
-      progress = xpInLevel / xpNeeded;
-      if (progress > 1.0) progress = 1.0;
-    }
-
-    final leveledUp = _newLevel > _oldLevel;
-
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Level $_oldLevel',
-              style: GoogleFonts.jetBrainsMono(
-                color: leveledUp ? AppColors.textSecondary : AppColors.ghostWhite,
-              ),
-            ),
-            if (leveledUp) ...[
-              const Icon(Icons.arrow_forward, color: AppColors.warningYellow),
-              Text(
-                'Level $_newLevel',
-                style: GoogleFonts.jetBrainsMono(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.warningYellow,
-                ),
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 12),
-        AnimatedBuilder(
-          animation: _xpAnimation,
-          builder: (context, child) {
-            return Container(
-              height: 12,
-              decoration: BoxDecoration(
-                color: AppColors.voidBlack,
-                border: Border.all(color: AppColors.warningYellow.withOpacity(0.5)),
-              ),
-              child: FractionallySizedBox(
-                alignment: Alignment.centerLeft,
-                widthFactor: _xpAnimation.value * progress,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.warningYellow,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.warningYellow.withOpacity(0.5),
-                        blurRadius: 8,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '$xpInLevel / $xpNeeded XP',
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 12,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        if (leveledUp && _controller.isCompleted) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: AppColors.warningYellow.withOpacity(0.2),
-            child: Text(
-              'LEVEL UP!',
-              style: GoogleFonts.creepster(
-                fontSize: 18,
-                color: AppColors.warningYellow,
-                letterSpacing: 4,
-                shadows: [
-                  Shadow(
-                    color: AppColors.warningYellow.withOpacity(0.5),
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ],
     );
   }
 }

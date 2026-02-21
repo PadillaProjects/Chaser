@@ -258,79 +258,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Level & XP Section
-                playerProfileAsync.when(
-                  data: (playerProfileData) {
-                    final playerProfile = playerProfileData ?? PlayerProfile(
-                        userId: userProfile.uid,
-                        level: 1,
-                        totalXP: 0,
-                        totalCoins: 0,
-                        totalDistance: 0,
-                        totalGamesPlayed: 0,
-                        createdAt: DateTime.now(),
-                    );
 
-                    return Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.fogGrey,
-                        border: Border.all(color: AppColors.pulseBlue.withOpacity(0.5)),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            'LEVEL ${playerProfile.level}',
-                            style: GoogleFonts.creepster(
-                              fontSize: 32,
-                              color: AppColors.pulseBlue,
-                              letterSpacing: 4,
-                              shadows: [
-                                Shadow(
-                                  color: AppColors.pulseBlue.withOpacity(0.5),
-                                  blurRadius: 10,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: AppColors.voidBlack,
-                              border: Border.all(color: AppColors.pulseBlue.withOpacity(0.5)),
-                            ),
-                            child: FractionallySizedBox(
-                              alignment: Alignment.centerLeft,
-                              widthFactor: playerProfile.currentLevelProgress,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: AppColors.pulseBlue,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.pulseBlue.withOpacity(0.5),
-                                      blurRadius: 8,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '${playerProfile.xpSinceCurrentLevelStart} / ${playerProfile.xpRequiredForNextLevel} XP',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                  loading: () => const SizedBox(height: 100),
-                  error: (_,__) => const SizedBox.shrink(),
-                ),
 
                 const SizedBox(height: 24),
 
@@ -356,11 +284,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   data: (playerProfileData) {
                     final playerProfile = playerProfileData ?? PlayerProfile(
                         userId: userProfile.uid,
-                        level: 1,
-                        totalXP: 0,
                         totalCoins: 0,
+                        totalCoinsEarned: 0,
+                        totalCoinsSpent: 0,
                         totalDistance: 0,
                         totalGamesPlayed: 0,
+                        totalWins: 0,
+                        totalLosses: 0,
+                        totalCaptures: 0,
+                        totalEscapes: 0,
+                        totalTimesCaptured: 0,
                         createdAt: DateTime.now(),
                     );
 

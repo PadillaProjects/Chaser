@@ -10,8 +10,6 @@ class UserProfile {
   final DateTime createdAt;
   final DateTime lastLogin;
   final CharacterProfile character;
-  final int level;
-  final int currentXp;
 
   UserProfile({
     required this.uid,
@@ -22,15 +20,8 @@ class UserProfile {
     required this.createdAt,
     required this.lastLogin,
     CharacterProfile? character,
-    this.level = 1,
-    this.currentXp = 0,
   }) : character = character ?? CharacterProfile.defaultProfile();
 
-  /// XP needed for next level (simple formula: 100 * current level)
-  int get xpForNextLevel => level * 100;
-  
-  /// Progress towards next level (0.0 to 1.0)
-  double get xpProgress => (currentXp / xpForNextLevel).clamp(0.0, 1.0);
 
   factory UserProfile.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -45,8 +36,6 @@ class UserProfile {
       character: data['character'] != null
           ? CharacterProfile.fromMap(data['character'] as Map<String, dynamic>)
           : null,
-      level: (data['level'] as int?) ?? 1,
-      currentXp: (data['current_xp'] as int?) ?? 0,
     );
   }
 
@@ -59,8 +48,6 @@ class UserProfile {
       'created_at': Timestamp.fromDate(createdAt),
       'last_login': Timestamp.fromDate(lastLogin),
       'character': character.toMap(),
-      'level': level,
-      'current_xp': currentXp,
     };
   }
 
@@ -72,8 +59,6 @@ class UserProfile {
     DateTime? createdAt,
     DateTime? lastLogin,
     CharacterProfile? character,
-    int? level,
-    int? currentXp,
   }) {
     return UserProfile(
       uid: this.uid,
@@ -84,8 +69,6 @@ class UserProfile {
       createdAt: createdAt ?? this.createdAt,
       lastLogin: lastLogin ?? this.lastLogin,
       character: character ?? this.character,
-      level: level ?? this.level,
-      currentXp: currentXp ?? this.currentXp,
     );
   }
 }
