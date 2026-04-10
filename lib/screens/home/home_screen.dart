@@ -9,8 +9,8 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'package:chaser/character/widgets/character_avatar.dart';
 import 'package:chaser/providers/user_provider.dart';
+import 'package:chaser/models/player_profile.dart';
 
 // ... (imports)
 
@@ -33,7 +33,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final sessionsAsync = ref.watch(userSessionsProvider);
-    final userProfileAsync = ref.watch(userProfileProvider);
+    final playerProfileAsync = ref.watch(playerProfileProvider);
 
     return Scaffold(
       backgroundColor: AppColors.voidBlack,
@@ -69,60 +69,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   BoxShadow(color: AppColors.bloodRed.withOpacity(0.1), blurRadius: 20, spreadRadius: 5),
                 ],
               ),
-              child: userProfileAsync.when(
-                data: (profile) => profile != null
-                    ? LayoutBuilder(
-                        builder: (context, constraints) {
-                          // Calculate character size to fit with room for text below
-                          final availableHeight = constraints.maxHeight;
-                          final charSize = (availableHeight * 0.55).clamp(100.0, 180.0);
-                          
-                          return Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // Character with glow
-                              GestureDetector(
-                                onTap: () => context.push('/customize'),
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    // Glow effect behind
-                                    Container(
-                                      width: charSize * 0.9,
-                                      height: charSize * 0.9,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(color: AppColors.pulseBlue.withOpacity(0.2), blurRadius: 50, spreadRadius: 10),
-                                        ],
-                                      ),
-                                    ),
-                                    CharacterAvatar(profile: profile.character, size: charSize),
-                                  ],
-                                ),
-                              ),
-                              
-                              const SizedBox(height: 8),
-                              
-
-                              const SizedBox(height: 12),
-                              
-                              // Customize Button
-                              FilledButton.icon(
-                                onPressed: () => context.push('/customize'),
-                                icon: const Icon(Icons.edit, size: 16),
-                                label: Text('CUSTOMIZE', style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold)),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppColors.bloodRed.withOpacity(0.2),
-                                  foregroundColor: AppColors.bloodRed,
-                                  side: BorderSide(color: AppColors.bloodRed),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      )
-                    : const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
+              child: playerProfileAsync.when(
+                data: (playerProfileData) {
+                  final profile = playerProfileData ?? PlayerProfile(
+                      userId: '',
+                      totalCoins: 0,
+                      totalCoinsEarned: 0,
+                      totalCoinsSpent: 0,
+                      totalDistance: 0,
+                      totalGamesPlayed: 0,
+                      totalWins: 0,
+                      totalLosses: 0,
+                      totalCaptures: 0,
+                      totalEscapes: 0,
+                      totalTimesCaptured: 0,
+                      createdAt: DateTime.now(),
+                  );
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('HUNTER STATS', style: GoogleFonts.creepster(fontSize: 20, color: AppColors.ghostWhite, letterSpacing: 2)),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildMiniStat('HUNTS', '${profile.totalGamesPlayed}', Icons.track_changes, AppColors.bloodRed),
+                            _buildMiniStat('WINS', '${profile.totalWins}', Icons.emoji_events, AppColors.warningYellow),
+                            _buildMiniStat('DISTANCE', '${profile.totalDistance.toStringAsFixed(0)}m', Icons.explore, AppColors.toxicGreen),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
                 loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
                 error: (e, _) => Center(child: Icon(Icons.error, color: AppColors.bloodRed)),
               ),
@@ -403,6 +384,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMiniStat(String title, String value, IconData icon, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 28),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: AppColors.ghostWhite,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          title,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 10,
+            color: AppColors.textSecondary,
+            letterSpacing: 1,
+          ),
+        ),
+      ],
     );
   }
 }

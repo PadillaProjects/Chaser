@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_profile.dart';
+import '../models/player_profile.dart';
 import '../models/session.dart';
 import '../services/firebase/auth_service.dart';
 import '../services/firebase/firestore_service.dart';
@@ -18,6 +19,17 @@ final userProfileProvider = StreamProvider<UserProfile?>((ref) {
   }
 
   return FirestoreService().watchUserProfile(user.uid);
+});
+
+final playerProfileProvider = StreamProvider<PlayerProfile?>((ref) {
+  final authState = ref.watch(authStateProvider);
+  final user = authState.value;
+
+  if (user == null) {
+    return Stream.value(null);
+  }
+
+  return FirestoreService().watchPlayerProfile(user.uid);
 });
 
 final userSessionsProvider = StreamProvider<List<SessionModel>>((ref) {

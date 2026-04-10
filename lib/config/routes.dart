@@ -10,7 +10,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:chaser/screens/profile/character_customization_screen.dart';
 
 final authServiceProvider = Provider((ref) => AuthService());
 
@@ -67,10 +66,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile',
         builder: (context, state) => const ProfileScreen(),
-      ),
-      GoRoute(
-        path: '/customize',
-        builder: (context, state) => const ConnectedCharacterCustomizationScreen(),
       ),
     ],
   );

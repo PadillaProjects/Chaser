@@ -6,9 +6,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:chaser/screens/profile/character_customization_screen.dart';
-import 'package:chaser/services/firebase/firestore_service.dart';
-import 'package:chaser/character/widgets/character_avatar.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:chaser/models/character/character_profile.dart'; // Explicit import just in case
 
@@ -93,25 +90,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  void _openCustomization(BuildContext context, UserProfile userProfile) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CharacterCustomizationScreen(
-          initialProfile: userProfile.character,
-          onSave: (newProfile) async {
-            await FirestoreService().updateCharacterProfile(userProfile.uid, newProfile);
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Character saved successfully.')),
-              );
-            }
-          },
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final userProfileAsync = ref.watch(userProfileStreamProvider);
@@ -157,11 +135,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Avatar & Customization
+                // Avatar Placeholder or Removed
                 Container(
+                  width: 100,
+                  height: 100,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    // border: Border.all(color: AppColors.bloodRed, width: 3),
+                    color: AppColors.voidBlack,
+                    border: Border.all(color: AppColors.bloodRed, width: 2),
                     boxShadow: [
                       BoxShadow(
                         color: AppColors.bloodRed.withOpacity(0.4),
@@ -170,24 +151,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     ],
                   ),
-                   child: GestureDetector(
-                       onTap: () {
-                             _openCustomization(context, userProfile);
-                       },
-                       child: CharacterAvatar(profile: userProfile.character, size: 100),
-                   ),
+                   child: const Icon(Icons.person, size: 50, color: AppColors.bloodRed),
                 ),
-                const SizedBox(height: 16),
-                
-                 OutlinedButton.icon(
-                    onPressed: () => _openCustomization(context, userProfile),
-                    icon: const Icon(Icons.edit, size: 16),
-                    label: Text('CUSTOMIZE', style: GoogleFonts.jetBrainsMono(letterSpacing: 2)),
-                    style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.bloodRed,
-                        side: BorderSide(color: AppColors.bloodRed.withOpacity(0.5)),
-                    ),
-                 ),
                 const SizedBox(height: 16),
 
                 // Name

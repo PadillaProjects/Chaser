@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:chaser/config/colors.dart';
 import 'package:chaser/models/player.dart';
 import 'package:chaser/models/user_profile.dart';
-import 'package:chaser/character/widgets/character_avatar.dart';
 import 'package:chaser/screens/session/session_detail_screen.dart';
 
 /// A horizontal scrollable track showing players positioned at their distances.
@@ -287,9 +286,7 @@ class SmoothPlayerMarker extends StatefulWidget {
 class _SmoothPlayerMarkerState extends State<SmoothPlayerMarker> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _leftAnimation;
-  
-  AnimationType _currentAnimType = AnimationType.idle;
-  
+
   @override
   void initState() {
     super.initState();
@@ -316,26 +313,12 @@ class _SmoothPlayerMarkerState extends State<SmoothPlayerMarker> with SingleTick
        
        // Calculate speed in meters/second
        // This assumes 1000ms duration
-       final distDelta = (widget.distance - oldWidget.distance).abs();
-       final speed = distDelta / 1.0; 
-       
-       if (speed < 0.2) {
-          _currentAnimType = AnimationType.idle;
-       } else if (speed < 2.5) {
-         _currentAnimType = AnimationType.walk;
-       } else {
-         _currentAnimType = AnimationType.run;
-       }
 
        _leftAnimation = Tween<double>(begin: start, end: end).animate(
          CurvedAnimation(parent: _controller, curve: Curves.easeInOutQuad)
        );
        
-       _controller.forward(from: 0).whenComplete(() {
-         if (mounted) {
-           setState(() => _currentAnimType = AnimationType.idle);
-         }
-       });
+       _controller.forward(from: 0);
     }
   }
 
@@ -354,12 +337,6 @@ class _SmoothPlayerMarkerState extends State<SmoothPlayerMarker> with SingleTick
         player: widget.driver,
         distance: widget.distance,
         size: widget.size,
-        animationType: _currentAnimType,
-        cycleDuration: _currentAnimType == AnimationType.run 
-            ? const Duration(milliseconds: 350)
-            : _currentAnimType == AnimationType.walk 
-                ? const Duration(milliseconds: 800)
-                : const Duration(milliseconds: 2000), 
       ),
     );
   }
@@ -369,15 +346,11 @@ class _PlayerContent extends ConsumerWidget {
   final PlayerModel player;
   final double distance;
   final double size;
-  final AnimationType animationType;
-  final Duration cycleDuration;
 
   const _PlayerContent({
     required this.player,
     required this.distance,
     required this.size,
-    required this.animationType,
-    required this.cycleDuration,
   });
 
   @override
@@ -425,35 +398,18 @@ class _PlayerContent extends ConsumerWidget {
           error: (_, __) => const SizedBox(height: 20),
         ),
         const SizedBox(height: 2),
-        // Character avatar
+        // Simple avatar icon instead of character avatar
         SizedBox(
           width: size,
           height: size,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(4),
-            child: userProfileAsync.when(
-              data: (userProfile) => AnimatedCharacterAvatar(
-                profile: userProfile.character,
-                size: size,
-                isAnimating: true,
-                animationType: animationType,
-                cycleDuration: cycleDuration,
-              ),
-              loading: () => Container(
-                color: roleColor.withOpacity(0.3),
-                child: Icon(
-                  isChaser ? Icons.gps_fixed : Icons.directions_run,
-                  color: roleColor,
-                  size: size * 0.5,
-                ),
-              ),
-              error: (_, __) => Container(
-                color: roleColor.withOpacity(0.3),
-                child: Icon(
-                  isChaser ? Icons.gps_fixed : Icons.directions_run,
-                  color: roleColor,
-                  size: size * 0.5,
-                ),
+            child: Container(
+              color: roleColor.withOpacity(0.3),
+              child: Icon(
+                isChaser ? Icons.gps_fixed : Icons.directions_run,
+                color: roleColor,
+                size: size * 0.6,
               ),
             ),
           ),
