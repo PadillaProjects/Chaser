@@ -111,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Text(
                     'CHASER',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.creepster(
+                    style: GoogleFonts.specialElite(
                       fontSize: 64,
                       color: AppColors.bloodRed,
                       letterSpacing: 8,
@@ -135,9 +135,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 // Tagline
                 Text(
-                  'THE HUNT AWAITS',
+                  'DON\'T LOOK BACK',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.jetBrainsMono(
+                  style: GoogleFonts.specialElite(
                     fontSize: 14,
                     color: AppColors.textSecondary,
                     letterSpacing: 6,
@@ -257,7 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           )
                         : Text(
-                            _isRegistering ? 'JOIN THE HUNT' : 'ENTER',
+                            _isRegistering ? 'START RUNNING' : 'ENTER',
                             style: GoogleFonts.jetBrainsMono(
                               fontWeight: FontWeight.bold,
                               letterSpacing: 4,
@@ -275,8 +275,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                   child: Text(
                     _isRegistering
-                        ? 'Already a hunter? Sign In'
-                        : 'New prey? Create account',
+                        ? 'Already a survivor? Sign In'
+                        : 'Are you alone? Register',
                     style: GoogleFonts.jetBrainsMono(
                       color: AppColors.textSecondary,
                       fontSize: 12,

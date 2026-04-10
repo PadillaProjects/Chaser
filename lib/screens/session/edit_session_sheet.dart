@@ -152,8 +152,8 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'HUNT SETTINGS',
-                    style: GoogleFonts.creepster(
+                    'GAME SETTINGS',
+                    style: GoogleFonts.specialElite(
                       fontSize: 24,
                       color: AppColors.ghostWhite,
                       letterSpacing: 2,
@@ -234,7 +234,7 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
                     ),
                     icon: const Icon(Icons.delete_forever),
                     label: Text(
-                      'DELETE HUNT',
+                      'CANCEL GAME',
                       style: GoogleFonts.jetBrainsMono(letterSpacing: 2),
                     ),
                   ),
@@ -254,8 +254,8 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
         backgroundColor: AppColors.fogGrey,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         title: Text(
-          'DELETE HUNT?',
-          style: GoogleFonts.creepster(fontSize: 24, color: AppColors.ghostWhite),
+          'CANCEL GAME?',
+          style: GoogleFonts.specialElite(fontSize: 24, color: AppColors.ghostWhite),
         ),
         content: Text(
           'This cannot be undone. All players will be removed.',
@@ -305,7 +305,7 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
           controller: _nameController,
           style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
           decoration: InputDecoration(
-            labelText: 'HUNT NAME',
+            labelText: 'GAME NAME',
             labelStyle: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary, letterSpacing: 2),
             filled: true,
             fillColor: AppColors.voidBlack,
@@ -364,7 +364,7 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
           color: AppColors.voidBlack,
           child: SwitchListTile(
             title: Text(
-              'SCHEDULE HUNT',
+              'SCHEDULE GAME',
               style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite, letterSpacing: 1),
             ),
             subtitle: Text(
@@ -398,7 +398,7 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'MAX PREY: ${widget.session.maxMembers}',
+                      'MAX SURVIVORS: ${widget.session.maxMembers}',
                       style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary),
                     ),
                     Text(

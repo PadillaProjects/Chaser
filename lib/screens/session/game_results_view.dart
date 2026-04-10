@@ -36,29 +36,29 @@ class _GameResultsViewState extends ConsumerState<GameResultsView> {
 
     Color bannerColor = AppColors.textMuted;
     IconData bannerIcon = Icons.flag;
-    String bannerText = 'THE HUNT ENDED';
+    String bannerText = 'IT\'S OVER';
     String bannerSubtext = 'No clear victor.';
 
     if (isRunnerWin) {
       bannerColor = AppColors.pulseBlue;
       bannerIcon = Icons.directions_run;
-      bannerText = 'RUNNERS SURVIVED';
-      bannerSubtext = 'The prey escaped the hunt.';
+      bannerText = 'ESCAPED ALIVE';
+      bannerSubtext = 'They got away.';
     } else if (isChaserWin) {
       bannerColor = AppColors.bloodRed;
       bannerIcon = Icons.gps_fixed;
-      bannerText = 'CHASERS DOMINATED';
-      bannerSubtext = 'All prey have been captured.';
+      bannerText = 'NO SURVIVORS';
+      bannerSubtext = 'Nobody made it out.';
     }
 
     String resultText = 'DEFEAT';
     Color resultColor = AppColors.bloodRed;
-    String resultSubtext = isChaserWin ? 'You were captured.' : 'The prey escaped.';
+    String resultSubtext = isChaserWin ? 'You were captured.' : 'They slipped away.';
 
     if (_didIWin) {
       resultText = 'VICTORY';
       resultColor = AppColors.toxicGreen;
-      resultSubtext = isRunnerWin ? 'You survived the hunt.' : 'You captured your prey.';
+      resultSubtext = isRunnerWin ? 'You made it out alive.' : 'You caught them.';
     } else if (isNeutral) {
       resultText = 'ENDED';
       resultColor = AppColors.textSecondary;
@@ -110,7 +110,7 @@ class _GameResultsViewState extends ConsumerState<GameResultsView> {
                     const SizedBox(height: 24),
                     Text(
                       bannerText,
-                      style: GoogleFonts.creepster(
+                      style: GoogleFonts.specialElite(
                         fontSize: 32,
                         color: bannerColor,
                         letterSpacing: 4,
@@ -161,7 +161,7 @@ class _GameResultsViewState extends ConsumerState<GameResultsView> {
                         children: [
                           Text(
                             resultText,
-                            style: GoogleFonts.creepster(
+                            style: GoogleFonts.specialElite(
                               fontSize: 24,
                               color: resultColor,
                               letterSpacing: 2,

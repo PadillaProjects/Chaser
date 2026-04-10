@@ -27,7 +27,7 @@ class AppTheme {
         foregroundColor: AppColors.ghostWhite,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.creepster(
+        titleTextStyle: GoogleFonts.specialElite(
           fontSize: 24,
           color: AppColors.ghostWhite,
           letterSpacing: 2,
@@ -46,27 +46,27 @@ class AppTheme {
 
       // Text Theme
       textTheme: TextTheme(
-        displayLarge: GoogleFonts.creepster(
+        displayLarge: GoogleFonts.specialElite(
           fontSize: 48,
           color: AppColors.ghostWhite,
           letterSpacing: 4,
         ),
-        displayMedium: GoogleFonts.creepster(
+        displayMedium: GoogleFonts.specialElite(
           fontSize: 36,
           color: AppColors.ghostWhite,
           letterSpacing: 3,
         ),
-        displaySmall: GoogleFonts.creepster(
+        displaySmall: GoogleFonts.specialElite(
           fontSize: 28,
           color: AppColors.ghostWhite,
           letterSpacing: 2,
         ),
-        headlineLarge: GoogleFonts.creepster(
+        headlineLarge: GoogleFonts.specialElite(
           fontSize: 32,
           color: AppColors.ghostWhite,
           letterSpacing: 2,
         ),
-        headlineMedium: GoogleFonts.creepster(
+        headlineMedium: GoogleFonts.specialElite(
           fontSize: 24,
           color: AppColors.ghostWhite,
           letterSpacing: 1.5,
@@ -235,7 +235,7 @@ class AppTheme {
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.zero,
         ),
-        titleTextStyle: GoogleFonts.creepster(
+        titleTextStyle: GoogleFonts.specialElite(
           fontSize: 24,
           color: AppColors.ghostWhite,
         ),

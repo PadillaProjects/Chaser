@@ -97,11 +97,11 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
         backgroundColor: AppColors.fogGrey,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         title: Text(
-          'FLEE THE ZONE?',
-          style: GoogleFonts.creepster(fontSize: 24, color: AppColors.ghostWhite),
+          'TRY TO ESCAPE?',
+          style: GoogleFonts.specialElite(fontSize: 24, color: AppColors.ghostWhite),
         ),
         content: Text(
-          'Are you sure you want to abandon the hunt?',
+          'Are you sure you want to leave them behind?',
           style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
         ),
         actions: [
@@ -146,8 +146,8 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'THE KILL ZONE',
-          style: GoogleFonts.creepster(fontSize: 24, letterSpacing: 2, color: AppColors.ghostWhite),
+          'THE GROUNDS',
+          style: GoogleFonts.specialElite(fontSize: 24, letterSpacing: 2, color: AppColors.ghostWhite),
         ),
         actions: [
           sessionAsync.when(
@@ -227,7 +227,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                   children: [
                     Text(
                       session.name.toUpperCase(),
-                      style: GoogleFonts.creepster(
+                      style: GoogleFonts.specialElite(
                         fontSize: 28,
                         color: AppColors.ghostWhite,
                         letterSpacing: 2,
@@ -283,7 +283,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                     ],
                      const SizedBox(height: 8),
                     Text(
-                      '${session.memberCount} / ${session.maxMembers} PREY',
+                      '${session.memberCount} / ${session.maxMembers} SURVIVORS',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 12,
                         color: AppColors.textMuted,
@@ -298,7 +298,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               // Game Rules Summary
               ExpansionTile(
                 title: Text(
-                  'HUNT RULES',
+                  'GAME RULES',
                   style: GoogleFonts.jetBrainsMono(
                     fontWeight: FontWeight.bold,
                     color: AppColors.ghostWhite,
@@ -358,7 +358,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                     if (players.isEmpty) {
                       return Center(
                         child: Text(
-                          'No prey yet...',
+                          'It\'s quiet. Too quiet...',
                           style: GoogleFonts.jetBrainsMono(color: AppColors.textMuted, fontStyle: FontStyle.italic),
                         ),
                       );
@@ -399,17 +399,17 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
       case 'pending':
         bgColor = AppColors.warningYellow.withOpacity(0.2);
         textColor = AppColors.warningYellow;
-        label = 'AWAITING PREY';
+        label = 'WAITING...';
         break;
       case 'active':
         bgColor = AppColors.bloodRed.withOpacity(0.2);
         textColor = AppColors.bloodRed;
-        label = 'HUNT ACTIVE';
+        label = 'GAME ACTIVE';
         break;
       case 'completed':
         bgColor = AppColors.textMuted.withOpacity(0.2);
         textColor = AppColors.textSecondary;
-        label = 'HUNT ENDED';
+        label = 'GAME ENDED';
         break;
       default:
         bgColor = AppColors.fogGrey;
@@ -645,7 +645,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
             ),
             icon: const Icon(Icons.stop),
             label: Text(
-              'END THE HUNT',
+              'END GAME',
               style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, letterSpacing: 2),
             ),
           ),
@@ -660,7 +660,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(
-                'SCHEDULE HUNT',
+                'SCHEDULE GAME',
                 style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite, letterSpacing: 2),
               ),
               subtitle: Text(
@@ -702,7 +702,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                   shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                 ),
                 child: Text(
-                  'RELEASE THE CHASER',
+                  'LET THEM LOOSE',
                   style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, letterSpacing: 2),
                 ),
               ),
@@ -725,7 +725,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               ),
               icon: const Icon(Icons.refresh),
               label: Text(
-                'RESET HUNT',
+                'RESET GAME',
                 style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, letterSpacing: 2),
               ),
             ),
@@ -752,8 +752,8 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
           child: Column(
             children: [
               Text(
-                'THE HUNT HAS ENDED',
-                style: GoogleFonts.creepster(fontSize: 20, color: AppColors.textSecondary),
+                'IT\'S OVER',
+                style: GoogleFonts.specialElite(fontSize: 20, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 8),
               OutlinedButton(
@@ -777,7 +777,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Center(
           child: Text(
-            session.status == 'active' ? 'The hunt is on...' : 'The Hunter prepares...',
+            session.status == 'active' ? 'They\'re coming...' : 'Someone is watching...',
             style: GoogleFonts.jetBrainsMono(color: AppColors.textMuted, fontStyle: FontStyle.italic),
           ),
         ),
@@ -792,7 +792,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'The Hunt Begins.',
+              'The Game Begins.',
               style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
             ),
             backgroundColor: AppColors.bloodRed,

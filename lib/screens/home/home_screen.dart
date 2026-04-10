@@ -40,7 +40,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: Text(
           'CHASER',
-          style: GoogleFonts.creepster(
+          style: GoogleFonts.specialElite(
             fontSize: 28,
             letterSpacing: 4,
             color: AppColors.bloodRed,
@@ -144,7 +144,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       Icon(Icons.radar, size: 16, color: AppColors.textSecondary),
                       const SizedBox(width: 8),
                       Text(
-                        'ACTIVE ZONES',
+                        'ACTIVE GAMES',
                         style: GoogleFonts.jetBrainsMono(
                           color: AppColors.textSecondary,
                           fontWeight: FontWeight.bold,
@@ -180,8 +180,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                'NO ACTIVE HUNTS',
-                                style: GoogleFonts.jetBrainsMono(
+                                'IT\'S QUIET AROUND HERE...',
+                                style: GoogleFonts.specialElite(
                                   color: AppColors.textMuted,
                                   letterSpacing: 1,
                                 ),
@@ -194,7 +194,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   foregroundColor: AppColors.textSecondary,
                                   side: BorderSide(color: AppColors.textSecondary),
                                 ),
-                                child: const Text('CREATE ZONE'),
+                                child: const Text('NEW GAME'),
                               ),
                             ],
                           ),
@@ -230,7 +230,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ),
                               ),
                               subtitle: Text(
-                                '${session.memberCount} Players • ${isActive ? 'HUNTING' : 'PENDING'}',
+                                '${session.memberCount} Players • ${isActive ? 'IN PROGRESS' : 'WAITING'}',
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 12,
                                   color: isActive ? AppColors.bloodRed : AppColors.textSecondary,
@@ -310,8 +310,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         backgroundColor: AppColors.fogGrey,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         title: Text(
-          'ENTER THE ZONE',
-          style: GoogleFonts.creepster(
+          'ENTER',
+          style: GoogleFonts.specialElite(
             fontSize: 24,
             color: AppColors.ghostWhite,
           ),

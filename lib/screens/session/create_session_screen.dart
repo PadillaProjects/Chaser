@@ -126,8 +126,8 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'BEGIN A HUNT',
-          style: GoogleFonts.creepster(
+          'START A GAME',
+          style: GoogleFonts.specialElite(
             fontSize: 24,
             letterSpacing: 2,
             color: AppColors.ghostWhite,
@@ -187,7 +187,7 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
                        child: CircularProgressIndicator(color: AppColors.ghostWhite, strokeWidth: 2),
                      )
                    : Text(
-                       'CREATE HUNT',
+                       'INITIALIZE',
                        style: GoogleFonts.jetBrainsMono(
                          fontWeight: FontWeight.bold,
                          letterSpacing: 4,
@@ -208,9 +208,9 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
           controller: _nameController,
           style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
           decoration: InputDecoration(
-            labelText: 'HUNT NAME',
+            labelText: 'GAME NAME',
             labelStyle: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary, letterSpacing: 2),
-            hintText: 'e.g. Office Bloodbath',
+            hintText: 'e.g. Woodsboro High',
             hintStyle: GoogleFonts.jetBrainsMono(color: AppColors.textMuted),
             filled: true,
             fillColor: AppColors.fogGrey,
@@ -230,7 +230,7 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
         const SizedBox(height: 24),
 
         Text(
-          'MAX PREY',
+          'MAX SURVIVORS',
           style: GoogleFonts.jetBrainsMono(
             color: AppColors.textSecondary,
             fontSize: 12,
