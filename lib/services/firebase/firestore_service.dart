@@ -245,10 +245,9 @@ class FirestoreService {
     members.shuffle();
 
     // 3. Determine Chaser Count
-    // Use settings, but ensure at least 1 and leave at least 1 runner
-    int chaserCount = session.numChasers;
-    if (chaserCount < 1) chaserCount = 1;
-    if (chaserCount >= members.length) chaserCount = members.length - 1;
+    // Use the host's preferred numChasers, clamped to (lobbySize - 1) so
+    // there is always at least 1 runner. Minimum of 1 chaser.
+    int chaserCount = session.numChasers.clamp(1, members.length - 1);
 
     // 4. Batch Update
     final batch = _firestore.batch();
@@ -294,7 +293,7 @@ class FirestoreService {
 
     // Update Session
     final startTime = DateTime.now();
-    final endTime = startTime.add(Duration(days: session.durationDays));
+    final endTime = startTime.add(Duration(minutes: session.durationInMinutes));
     
     batch.update(_firestore.collection('sessions').doc(sessionId), {
         'status': 'active',
@@ -567,7 +566,7 @@ class FirestoreService {
       // Check Time limit (Runners Win) (Only if scheduled/actual start time exists)
       final start = session.actualStartTime?.toDate();
       if (start != null && session.status == 'active') {
-          final end = start.add(Duration(days: session.durationDays));
+          final end = start.add(Duration(minutes: session.durationInMinutes));
           if (now.isAfter(end) && activeRunnerCount > 0) {
               return GameLogicResult('runners_win', workingPlayers);
           }

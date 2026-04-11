@@ -3,6 +3,7 @@ import 'package:chaser/config/colors.dart';
 import 'package:chaser/models/session.dart';
 import 'package:chaser/services/firebase/auth_service.dart';
 import 'package:chaser/services/firebase/firestore_service.dart';
+import 'package:chaser/utils/unit_converter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,20 +25,25 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
 
   // General
   double _maxMembers = 8;
+  int _numChasers = 1;
 
   // Game Rules
   String _gameMode = 'original';
   int _durationDays = 7;
-  int _numChasers = 1;
+  String _durationUnit = 'days';
   double _headstartDistance = 0;
+  String _headstartDistanceUnit = 'm';
   int _headstartDuration = 0;
+  String _headstartDurationUnit = 'min';
   TimeOfDay _restStartTime = const TimeOfDay(hour: 0, minute: 0);
   TimeOfDay _restEndTime = const TimeOfDay(hour: 0, minute: 0);
 
   // Advanced / Capture
   bool _instantCapture = false;
   int _captureResistanceDuration = 0;
+  String _captureResistanceDurationUnit = 'min';
   double _captureResistanceDistance = 0;
+  String _captureResistanceDistanceUnit = 'm';
   int _switchCooldown = 0;
 
   bool _isLoading = false;
@@ -83,6 +89,16 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
     setState(() => _isLoading = true);
 
     try {
+      // Convert display values to canonical DB units (meters, minutes)
+      final headstartDistanceMeters =
+          UnitConverter.toMeters(_headstartDistance, _headstartDistanceUnit);
+      final headstartDurationMinutes =
+          UnitConverter.toMinutes(_headstartDuration, _headstartDurationUnit);
+      final captureResistanceDurationMinutes = UnitConverter.toMinutes(
+          _captureResistanceDuration, _captureResistanceDurationUnit);
+      final captureResistanceDistanceMeters = UnitConverter.toMeters(
+          _captureResistanceDistance, _captureResistanceDistanceUnit);
+
       final session = SessionModel(
         id: '',
         name: _nameController.text.trim(),
@@ -90,19 +106,24 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
         createdBy: userUid,
         gameMode: _gameMode,
         durationDays: _durationDays,
+        durationUnit: _durationUnit,
         numChasers: _numChasers,
         maxMembers: _maxMembers.round(),
         visibility: 'private',
         joinCode: _generateJoinCode(),
         password: null,
-        headstartDistance: _headstartDistance,
-        headstartDuration: _headstartDuration,
+        headstartDistance: headstartDistanceMeters,
+        headstartDistanceUnit: _headstartDistanceUnit,
+        headstartDuration: headstartDurationMinutes,
+        headstartDurationUnit: _headstartDurationUnit,
         restStartHour: _restStartTime.hour,
         restEndHour: _restEndTime.hour,
         switchCooldown: _switchCooldown,
         instantCapture: _instantCapture,
-        captureResistanceDuration: _captureResistanceDuration,
-        captureResistanceDistance: _captureResistanceDistance,
+        captureResistanceDuration: captureResistanceDurationMinutes,
+        captureResistanceDurationUnit: _captureResistanceDurationUnit,
+        captureResistanceDistance: captureResistanceDistanceMeters,
+        captureResistanceDistanceUnit: _captureResistanceDistanceUnit,
       );
 
       final sessionId = await _firestoreService.createSession(session);
@@ -230,7 +251,7 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
         const SizedBox(height: 24),
 
         Text(
-          'MAX SURVIVORS',
+          'MAX PLAYERS',
           style: GoogleFonts.jetBrainsMono(
             color: AppColors.textSecondary,
             fontSize: 12,
@@ -249,7 +270,14 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
                 activeColor: AppColors.bloodRed,
                 inactiveColor: AppColors.textMuted,
                 label: _maxMembers.round().toString(),
-                onChanged: (val) => setState(() => _maxMembers = val),
+                onChanged: (val) {
+                  setState(() {
+                    _maxMembers = val;
+                    // Clamp chasers so there's always at least 1 runner
+                    final maxChasers = _maxMembers.round() - 1;
+                    if (_numChasers > maxChasers) _numChasers = maxChasers.clamp(1, 99);
+                  });
+                },
               ),
             ),
             Container(
@@ -278,7 +306,7 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
           label: 'GAME MODE',
           value: _gameMode,
           items: const [
-            DropdownMenuItem(value: 'original', child: Text('Original Tag')),
+            DropdownMenuItem(value: 'original', child: Text('Normal')),
             DropdownMenuItem(value: 'target', child: Text('Target Mode')),
           ],
           onChanged: (val) => setState(() => _gameMode = val!),
@@ -286,76 +314,41 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
         ),
         const SizedBox(height: 16),
 
-        _buildDropdown(
-          label: 'DURATION',
-          value: _durationDays,
-          items: const [
-            DropdownMenuItem(value: 3, child: Text('3 Days')),
-            DropdownMenuItem(value: 7, child: Text('7 Days')),
-            DropdownMenuItem(value: 14, child: Text('14 Days')),
-            DropdownMenuItem(value: 30, child: Text('30 Days')),
-          ],
-          onChanged: (val) => setState(() => _durationDays = val!),
-          icon: Icons.timer,
+        _buildValueUnitField(
+          label: 'GAME DURATION',
+          initialValue: _durationDays.toString(),
+          onValueChanged: (val) => _durationDays = int.tryParse(val) ?? 7,
+          unitValue: _durationUnit,
+          units: const ['min', 'hours', 'days'],
+          onUnitChanged: (val) => setState(() => _durationUnit = val!),
+          helperText: 'How long survivors must outlast the chasers',
         ),
         const SizedBox(height: 16),
 
-        // Num Chasers
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: AppColors.fogGrey,
-          child: Row(
-            children: [
-              const Icon(Icons.gps_fixed, color: AppColors.bloodRed),
-              const SizedBox(width: 12),
-              Text(
-                'CHASERS',
-                style: GoogleFonts.jetBrainsMono(
-                  color: AppColors.ghostWhite,
-                  letterSpacing: 2,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.remove, color: AppColors.ghostWhite),
-                onPressed: _numChasers > 1 ? () => setState(() => _numChasers--) : null,
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: AppColors.voidBlack,
-                child: Text(
-                  '$_numChasers',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.bloodRed,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add, color: AppColors.ghostWhite),
-                onPressed: _numChasers < 3 ? () => setState(() => _numChasers++) : null,
-              ),
-            ],
-          ),
-        ),
+        // Chasers – constrained to [1, maxMembers-1]
+        _buildChasersRow(),
+        const SizedBox(height: 16),
 
         const SizedBox(height: 24),
         _buildSectionHeader('HEADSTART'),
         const SizedBox(height: 8),
 
-        _buildNumberField(
-          label: 'DISTANCE (METERS)',
+        _buildValueUnitField(
+          label: 'DISTANCE',
           initialValue: _headstartDistance.toString(),
-          suffix: 'm',
-          onChanged: (val) => _headstartDistance = double.tryParse(val) ?? 0,
+          onValueChanged: (val) => _headstartDistance = double.tryParse(val) ?? 0,
+          unitValue: _headstartDistanceUnit,
+          units: const ['m', 'km', 'mi'],
+          onUnitChanged: (val) => setState(() => _headstartDistanceUnit = val!),
         ),
         const SizedBox(height: 12),
-        _buildNumberField(
-          label: 'DURATION (MINUTES)',
+        _buildValueUnitField(
+          label: 'DURATION',
           initialValue: _headstartDuration.toString(),
-          suffix: 'min',
-          onChanged: (val) => _headstartDuration = int.tryParse(val) ?? 0,
+          onValueChanged: (val) => _headstartDuration = int.tryParse(val) ?? 0,
+          unitValue: _headstartDurationUnit,
+          units: const ['min', 'hours', 'days'],
+          onUnitChanged: (val) => setState(() => _headstartDurationUnit = val!),
         ),
 
         const SizedBox(height: 24),
@@ -420,18 +413,22 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
           const SizedBox(height: 24),
           _buildSectionHeader('CAPTURE RESISTANCE'),
           const SizedBox(height: 8),
-          _buildNumberField(
-            label: 'RESISTANCE DURATION (MIN)',
+          _buildValueUnitField(
+            label: 'RESISTANCE DURATION',
             initialValue: _captureResistanceDuration.toString(),
-            suffix: 'min',
-            onChanged: (val) => _captureResistanceDuration = int.tryParse(val) ?? 0,
+            onValueChanged: (val) => _captureResistanceDuration = int.tryParse(val) ?? 0,
+            unitValue: _captureResistanceDurationUnit,
+            units: const ['min', 'hours', 'days'],
+            onUnitChanged: (val) => setState(() => _captureResistanceDurationUnit = val!),
           ),
           const SizedBox(height: 12),
-          _buildNumberField(
-            label: 'RESISTANCE DISTANCE (M)',
+          _buildValueUnitField(
+            label: 'RESISTANCE DISTANCE',
             initialValue: _captureResistanceDistance.toString(),
-            suffix: 'm',
-            onChanged: (val) => _captureResistanceDistance = double.tryParse(val) ?? 0,
+            onValueChanged: (val) => _captureResistanceDistance = double.tryParse(val) ?? 0,
+            unitValue: _captureResistanceDistanceUnit,
+            units: const ['m', 'km', 'mi'],
+            onUnitChanged: (val) => setState(() => _captureResistanceDistanceUnit = val!),
           ),
         ],
 
@@ -451,7 +448,71 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
     );
   }
 
+  Widget _buildChasersRow() {
+    final maxChasers = (_maxMembers.round() - 1).clamp(1, 99);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: AppColors.fogGrey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.gps_fixed, color: AppColors.bloodRed, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                'CHASERS',
+                style: GoogleFonts.jetBrainsMono(
+                  color: AppColors.ghostWhite,
+                  letterSpacing: 2,
+                ),
+              ),
+              const Spacer(),
+              // Decrease button
+              IconButton(
+                icon: const Icon(Icons.remove, color: AppColors.ghostWhite),
+                onPressed: _numChasers > 1
+                    ? () => setState(() => _numChasers--)
+                    : null,
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                color: AppColors.voidBlack,
+                child: Text(
+                  '$_numChasers',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.bloodRed,
+                  ),
+                ),
+              ),
+              // Increase button
+              IconButton(
+                icon: const Icon(Icons.add, color: AppColors.ghostWhite),
+                onPressed: _numChasers < maxChasers
+                    ? () => setState(() => _numChasers++)
+                    : null,
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 32),
+            child: Text(
+              'Max $maxChasers (must leave ≥ 1 runner)',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSectionHeader(String title) {
+
     return Row(
       children: [
         Container(width: 4, height: 16, color: AppColors.bloodRed),
@@ -531,6 +592,57 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
         ),
       ),
       onChanged: onChanged,
+    );
+  }
+
+  Widget _buildValueUnitField({
+    required String label,
+    required String initialValue,
+    required ValueChanged<String> onValueChanged,
+    required String unitValue,
+    required List<String> units,
+    required ValueChanged<String?> onUnitChanged,
+    String? helperText,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 2,
+          child: _buildNumberField(
+            label: label,
+            initialValue: initialValue,
+            suffix: '',
+            onChanged: onValueChanged,
+            helperText: helperText,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 1,
+          child: DropdownButtonFormField<String>(
+            value: unitValue,
+            dropdownColor: AppColors.fogGrey,
+            style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed, fontWeight: FontWeight.bold),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.fogGrey,
+              border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: AppColors.textMuted.withOpacity(0.3)),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: AppColors.bloodRed, width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+            ),
+            items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+            onChanged: onUnitChanged,
+          ),
+        ),
+      ],
     );
   }
 

@@ -152,7 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _nameController,
                     style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
                     decoration: InputDecoration(
-                      labelText: 'HUNTER NAME',
+                      labelText: 'DISPLAY NAME',
                       labelStyle: GoogleFonts.jetBrainsMono(
                         color: AppColors.textSecondary,
                         letterSpacing: 2,

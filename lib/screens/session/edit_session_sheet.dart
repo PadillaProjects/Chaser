@@ -1,6 +1,7 @@
 import 'package:chaser/config/colors.dart';
 import 'package:chaser/models/session.dart';
 import 'package:chaser/services/firebase/firestore_service.dart';
+import 'package:chaser/utils/unit_converter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -25,14 +26,19 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
   late String _visibility;
   late int _numChasers;
   late int _durationDays;
+  late String _durationUnit;
   late String _gameMode;
   late double _headstartDistance;
+  late String _headstartDistanceUnit;
   late int _headstartDuration;
+  late String _headstartDurationUnit;
   TimeOfDay _restStartTime = const TimeOfDay(hour: 0, minute: 0);
   TimeOfDay _restEndTime = const TimeOfDay(hour: 0, minute: 0);
   late bool _instantCapture;
   late int _captureResistanceDuration;
+  late String _captureResistanceDurationUnit;
   late double _captureResistanceDistance;
+  late String _captureResistanceDistanceUnit;
   late int _switchCooldown;
   DateTime? _scheduledStartTime;
 
@@ -47,16 +53,37 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
     _passwordController = TextEditingController(text: widget.session.password ?? '');
 
     _visibility = widget.session.visibility;
-    _numChasers = widget.session.numChasers;
+    _numChasers = widget.session.numChasers
+        .clamp(1, (widget.session.memberCount - 1).clamp(1, 99));
     _durationDays = widget.session.durationDays;
+    _durationUnit = widget.session.durationUnit;
     _gameMode = widget.session.gameMode;
-    _headstartDistance = widget.session.headstartDistance;
-    _headstartDuration = widget.session.headstartDuration;
+
+    // Stored values are always in meters / minutes.
+    // Convert them back to the saved display unit so forms show what the user entered.
+    _headstartDistanceUnit = widget.session.headstartDistanceUnit;
+    _headstartDistance = UnitConverter.fromMeters(
+        widget.session.headstartDistance, _headstartDistanceUnit);
+
+    _headstartDurationUnit = widget.session.headstartDurationUnit;
+    _headstartDuration = UnitConverter.fromMinutes(
+            widget.session.headstartDuration, _headstartDurationUnit)
+        .round();
+
     _restStartTime = TimeOfDay(hour: widget.session.restStartHour, minute: 0);
     _restEndTime = TimeOfDay(hour: widget.session.restEndHour, minute: 0);
     _instantCapture = widget.session.instantCapture;
-    _captureResistanceDuration = widget.session.captureResistanceDuration;
-    _captureResistanceDistance = widget.session.captureResistanceDistance;
+
+    _captureResistanceDurationUnit = widget.session.captureResistanceDurationUnit;
+    _captureResistanceDuration = UnitConverter.fromMinutes(
+            widget.session.captureResistanceDuration,
+            _captureResistanceDurationUnit)
+        .round();
+
+    _captureResistanceDistanceUnit = widget.session.captureResistanceDistanceUnit;
+    _captureResistanceDistance = UnitConverter.fromMeters(
+        widget.session.captureResistanceDistance, _captureResistanceDistanceUnit);
+
     _switchCooldown = widget.session.switchCooldown;
     _scheduledStartTime = widget.session.scheduledStartTime?.toDate();
   }
@@ -100,6 +127,16 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
     setState(() => _isLoading = true);
 
     try {
+      // Convert display values to canonical DB units (meters, minutes)
+      final headstartDistanceMeters =
+          UnitConverter.toMeters(_headstartDistance, _headstartDistanceUnit);
+      final headstartDurationMinutes =
+          UnitConverter.toMinutes(_headstartDuration, _headstartDurationUnit);
+      final captureResistanceDurationMinutes = UnitConverter.toMinutes(
+          _captureResistanceDuration, _captureResistanceDurationUnit);
+      final captureResistanceDistanceMeters = UnitConverter.toMeters(
+          _captureResistanceDistance, _captureResistanceDistanceUnit);
+
       final updates = {
         'session_name': _nameController.text.trim(),
         'visibility': _visibility,
@@ -109,14 +146,19 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
 
         'settings.num_chasers': _numChasers,
         'settings.duration_days': _durationDays,
+        'settings.duration_unit': _durationUnit,
         'settings.rest_start_hour': _restStartTime.hour,
         'settings.rest_end_hour': _restEndTime.hour,
-        'settings.headstart_distance': _headstartDistance,
-        'settings.headstart_duration': _headstartDuration,
+        'settings.headstart_distance': headstartDistanceMeters,
+        'settings.headstart_distance_unit': _headstartDistanceUnit,
+        'settings.headstart_duration': headstartDurationMinutes,
+        'settings.headstart_duration_unit': _headstartDurationUnit,
         'settings.switch_cooldown': _switchCooldown,
         'settings.instant_capture': _instantCapture,
-        'settings.capture_resistance_duration': _captureResistanceDuration,
-        'settings.capture_resistance_distance': _captureResistanceDistance,
+        'settings.capture_resistance_duration': captureResistanceDurationMinutes,
+        'settings.capture_resistance_duration_unit': _captureResistanceDurationUnit,
+        'settings.capture_resistance_distance': captureResistanceDistanceMeters,
+        'settings.capture_resistance_distance_unit': _captureResistanceDistanceUnit,
       };
 
       await FirestoreService().updateSession(widget.session.id, updates);
@@ -398,7 +440,7 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'MAX SURVIVORS: ${widget.session.maxMembers}',
+                      'MAX PLAYERS: ${widget.session.maxMembers}',
                       style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary),
                     ),
                     Text(
@@ -432,87 +474,48 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
             prefixIcon: const Icon(Icons.sports_kabaddi, color: AppColors.bloodRed),
           ),
           items: const [
-            DropdownMenuItem(value: 'original', child: Text('Original Tag')),
+            DropdownMenuItem(value: 'original', child: Text('Normal')),
             DropdownMenuItem(value: 'target', child: Text('Target Mode')),
           ],
           onChanged: (val) => setState(() => _gameMode = val!),
         ),
         const SizedBox(height: 16),
 
-        DropdownButtonFormField<int>(
-          value: _durationDays,
-          dropdownColor: AppColors.fogGrey,
-          style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
-          decoration: InputDecoration(
-            labelText: 'DURATION',
-            labelStyle: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary, letterSpacing: 2),
-            filled: true,
-            fillColor: AppColors.voidBlack,
-            border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
-            prefixIcon: const Icon(Icons.timer, color: AppColors.bloodRed),
-          ),
-          items: const [
-            DropdownMenuItem(value: 3, child: Text('3 Days')),
-            DropdownMenuItem(value: 7, child: Text('7 Days')),
-            DropdownMenuItem(value: 14, child: Text('14 Days')),
-            DropdownMenuItem(value: 30, child: Text('30 Days')),
-          ],
-          onChanged: (val) => setState(() => _durationDays = val!),
+        _buildValueUnitField(
+          label: 'GAME DURATION',
+          initialValue: _durationDays.toString(),
+          onValueChanged: (val) => _durationDays = int.tryParse(val) ?? 7,
+          unitValue: _durationUnit,
+          units: const ['min', 'hours', 'days'],
+          onUnitChanged: (val) => setState(() => _durationUnit = val!),
+          helperText: 'How long survivors must outlast the chasers',
         ),
         const SizedBox(height: 16),
 
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: AppColors.voidBlack,
-          child: Row(
-            children: [
-              const Icon(Icons.gps_fixed, color: AppColors.bloodRed),
-              const SizedBox(width: 12),
-              Text(
-                'CHASERS',
-                style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite, letterSpacing: 2),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.remove, color: AppColors.ghostWhite),
-                onPressed: _numChasers > 1 ? () => setState(() => _numChasers--) : null,
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: AppColors.fogGrey,
-                child: Text(
-                  '$_numChasers',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.bloodRed,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add, color: AppColors.ghostWhite),
-                onPressed: _numChasers < 3 ? () => setState(() => _numChasers++) : null,
-              ),
-            ],
-          ),
-        ),
+        // Chasers – constrained to [1, maxMembers-1]
+        _buildChasersRow(),
+        const SizedBox(height: 16),
 
         const SizedBox(height: 24),
         _buildSectionHeader('HEADSTART'),
         const SizedBox(height: 8),
 
-        _buildNumberField(
-          label: 'DISTANCE (M)',
+        _buildValueUnitField(
+          label: 'DISTANCE',
           initialValue: _headstartDistance.toString(),
-          suffix: 'm',
-          onChanged: (val) => _headstartDistance = double.tryParse(val) ?? 0,
+          onValueChanged: (val) => _headstartDistance = double.tryParse(val) ?? 0,
+          unitValue: _headstartDistanceUnit,
+          units: const ['m', 'km', 'mi'],
+          onUnitChanged: (val) => setState(() => _headstartDistanceUnit = val!),
         ),
         const SizedBox(height: 12),
-        _buildNumberField(
-          label: 'DURATION (MIN)',
+        _buildValueUnitField(
+          label: 'DURATION',
           initialValue: _headstartDuration.toString(),
-          suffix: 'min',
-          onChanged: (val) => _headstartDuration = int.tryParse(val) ?? 0,
+          onValueChanged: (val) => _headstartDuration = int.tryParse(val) ?? 0,
+          unitValue: _headstartDurationUnit,
+          units: const ['min', 'hours', 'days'],
+          onUnitChanged: (val) => setState(() => _headstartDurationUnit = val!),
         ),
 
         const SizedBox(height: 24),
@@ -577,18 +580,22 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
           const SizedBox(height: 24),
           _buildSectionHeader('CAPTURE RESISTANCE'),
           const SizedBox(height: 8),
-          _buildNumberField(
-            label: 'DURATION (MIN)',
+          _buildValueUnitField(
+            label: 'DURATION',
             initialValue: _captureResistanceDuration.toString(),
-            suffix: 'min',
-            onChanged: (val) => _captureResistanceDuration = int.tryParse(val) ?? 0,
+            onValueChanged: (val) => _captureResistanceDuration = int.tryParse(val) ?? 0,
+            unitValue: _captureResistanceDurationUnit,
+            units: const ['min', 'hours', 'days'],
+            onUnitChanged: (val) => setState(() => _captureResistanceDurationUnit = val!),
           ),
           const SizedBox(height: 12),
-          _buildNumberField(
-            label: 'DISTANCE (M)',
+          _buildValueUnitField(
+            label: 'DISTANCE',
             initialValue: _captureResistanceDistance.toString(),
-            suffix: 'm',
-            onChanged: (val) => _captureResistanceDistance = double.tryParse(val) ?? 0,
+            onValueChanged: (val) => _captureResistanceDistance = double.tryParse(val) ?? 0,
+            unitValue: _captureResistanceDistanceUnit,
+            units: const ['m', 'km', 'mi'],
+            onUnitChanged: (val) => setState(() => _captureResistanceDistanceUnit = val!),
           ),
         ],
 
@@ -607,7 +614,72 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
     );
   }
 
+  Widget _buildChasersRow() {
+    // Bound to actual players currently in the lobby, not the max capacity.
+    // Minimum 1 chaser, maximum = lobbySize - 1 (must leave ≥ 1 runner).
+    final lobbySize = widget.session.memberCount;
+    final maxChasers = (lobbySize - 1).clamp(1, 99);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: AppColors.voidBlack,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.gps_fixed, color: AppColors.bloodRed, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                'CHASERS',
+                style: GoogleFonts.jetBrainsMono(
+                  color: AppColors.ghostWhite,
+                  letterSpacing: 2,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.remove, color: AppColors.ghostWhite),
+                onPressed: _numChasers > 1
+                    ? () => setState(() => _numChasers--)
+                    : null,
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                color: AppColors.fogGrey,
+                child: Text(
+                  '$_numChasers',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.bloodRed,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add, color: AppColors.ghostWhite),
+                onPressed: _numChasers < maxChasers
+                    ? () => setState(() => _numChasers++)
+                    : null,
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 32),
+            child: Text(
+              'Max $maxChasers of $lobbySize players (must leave ≥ 1 runner)',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSectionHeader(String title) {
+
     return Row(
       children: [
         Container(width: 4, height: 16, color: AppColors.bloodRed),
@@ -652,6 +724,56 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
         ),
       ),
       onChanged: onChanged,
+    );
+  }
+
+  Widget _buildValueUnitField({
+    required String label,
+    required String initialValue,
+    required ValueChanged<String> onValueChanged,
+    required String unitValue,
+    required List<String> units,
+    required ValueChanged<String?> onUnitChanged,
+    String? helperText,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 2,
+          child: _buildNumberField(
+            label: label,
+            initialValue: initialValue,
+            suffix: '',
+            onChanged: onValueChanged,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 1,
+          child: DropdownButtonFormField<String>(
+            value: unitValue,
+            dropdownColor: AppColors.fogGrey,
+            style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed, fontWeight: FontWeight.bold),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.voidBlack,
+              border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: AppColors.textMuted.withOpacity(0.3)),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: AppColors.bloodRed, width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+            ),
+            items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+            onChanged: onUnitChanged,
+          ),
+        ),
+      ],
     );
   }
 

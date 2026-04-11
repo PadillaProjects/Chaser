@@ -62,7 +62,7 @@ class _GameResultsViewState extends ConsumerState<GameResultsView> {
     } else if (isNeutral) {
       resultText = 'ENDED';
       resultColor = AppColors.textSecondary;
-      resultSubtext = 'The hunt was stopped.';
+      resultSubtext = 'The chase was stopped.';
     }
 
     return Scaffold(

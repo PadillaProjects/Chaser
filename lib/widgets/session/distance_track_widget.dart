@@ -108,11 +108,9 @@ class _DistanceTrackWidgetState extends ConsumerState<DistanceTrackWidget> {
         color: AppColors.voidBlack.withOpacity(0.6),
         border: Border.all(color: AppColors.textMuted.withOpacity(0.3)),
       ),
-      child: InteractiveViewer(
-        constrained: false,
-        minScale: 0.5,
-        maxScale: 4.0,
-        boundaryMargin: const EdgeInsets.all(100),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
         child: SizedBox(
           width: trackWidth,
           height: _trackHeight,
@@ -137,10 +135,10 @@ class _DistanceTrackWidgetState extends ConsumerState<DistanceTrackWidget> {
                   ),
                 ),
               ),
-              
+
               // Distance markers
               ..._buildDistanceMarkers(),
-              
+
               // Player markers
               ..._buildPlayerMarkers(),
             ],
@@ -212,9 +210,6 @@ class _DistanceTrackWidgetState extends ConsumerState<DistanceTrackWidget> {
   }
 
   String _formatDistance(int meters) {
-    if (meters >= 1000) {
-      return '${(meters / 1000).toStringAsFixed(1)}km';
-    }
     return '${meters}m';
   }
 

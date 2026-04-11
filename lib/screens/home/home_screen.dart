@@ -12,14 +12,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:chaser/providers/user_provider.dart';
 import 'package:chaser/models/player_profile.dart';
 
-// ... (imports)
-
-// Remove local definition of authStateProvider since we moved it to user_provider.dart
-// But wait, HomeScreen defines userSessionsProvider which depends on authStateProvider.
-// I should update userSessionsProvider to use the one from user_provider.dart or just leave it if names collide.
-// Actually, looking at the code, I can just import user_provider.dart and remove the local authStateProvider definition.
-// But userSessionsProvider is defined in this file too. I should update it to use the import.
-
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -27,8 +19,21 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
-  // ... initState ...
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _statsTabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _statsTabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _statsTabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,63 +54,132 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
         centerTitle: true,
         actions: [
-             IconButton(
-              icon: const Icon(Icons.settings, color: AppColors.textMuted),
-              onPressed: () => context.push('/profile'), 
-            ),
+          IconButton(
+            icon: const Icon(Icons.settings, color: AppColors.textMuted),
+            onPressed: () => context.push('/profile'),
+          ),
         ],
       ),
       body: Column(
         children: [
-          // --- TOP HALF: CHARACTER ---
+          // --- TOP HALF: STATS ---
           Expanded(
             flex: 4,
             child: Container(
               width: double.infinity,
               decoration: BoxDecoration(
                 color: AppColors.voidBlack,
-                border: Border(bottom: BorderSide(color: AppColors.bloodRed.withOpacity(0.3))),
+                border: Border(
+                  bottom: BorderSide(color: AppColors.bloodRed.withOpacity(0.3)),
+                ),
                 boxShadow: [
-                  BoxShadow(color: AppColors.bloodRed.withOpacity(0.1), blurRadius: 20, spreadRadius: 5),
+                  BoxShadow(
+                    color: AppColors.bloodRed.withOpacity(0.1),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  ),
                 ],
               ),
               child: playerProfileAsync.when(
                 data: (playerProfileData) {
-                  final profile = playerProfileData ?? PlayerProfile(
-                      userId: '',
-                      totalCoins: 0,
-                      totalCoinsEarned: 0,
-                      totalCoinsSpent: 0,
-                      totalDistance: 0,
-                      totalGamesPlayed: 0,
-                      totalWins: 0,
-                      totalLosses: 0,
-                      totalCaptures: 0,
-                      totalEscapes: 0,
-                      totalTimesCaptured: 0,
-                      createdAt: DateTime.now(),
-                  );
+                  final profile = playerProfileData ??
+                      PlayerProfile(
+                        userId: '',
+                        totalCoins: 0,
+                        totalCoinsEarned: 0,
+                        totalCoinsSpent: 0,
+                        totalDistance: 0,
+                        totalGamesPlayed: 0,
+                        totalWins: 0,
+                        totalLosses: 0,
+                        totalCaptures: 0,
+                        totalEscapes: 0,
+                        totalTimesCaptured: 0,
+                        createdAt: DateTime.now(),
+                      );
+
+                  // Derived stats
+                  final winRate = profile.totalGamesPlayed > 0
+                      ? (profile.totalWins / profile.totalGamesPlayed * 100)
+                          .toStringAsFixed(0)
+                      : '0';
+                  final captureRate = profile.totalGamesPlayed > 0
+                      ? (profile.totalCaptures /
+                              profile.totalGamesPlayed)
+                          .toStringAsFixed(1)
+                      : '0';
+
                   return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('HUNTER STATS', style: GoogleFonts.creepster(fontSize: 20, color: AppColors.ghostWhite, letterSpacing: 2)),
-                      const SizedBox(height: 16),
+                      // Tab bar label
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        padding: const EdgeInsets.only(top: 12, bottom: 4),
+                        child: Text(
+                          'PLAYER STATS',
+                          style: GoogleFonts.specialElite(
+                            fontSize: 16,
+                            color: AppColors.ghostWhite,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                      ),
+                      // Category tabs
+                      TabBar(
+                        controller: _statsTabController,
+                        labelColor: AppColors.bloodRed,
+                        unselectedLabelColor: AppColors.textMuted,
+                        indicatorColor: AppColors.bloodRed,
+                        indicatorSize: TabBarIndicatorSize.label,
+                        dividerColor: Colors.transparent,
+                        labelStyle: GoogleFonts.jetBrainsMono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                        unselectedLabelStyle:
+                            GoogleFonts.jetBrainsMono(fontSize: 11, letterSpacing: 1),
+                        tabs: const [
+                          Tab(text: 'OVERALL'),
+                          Tab(text: 'CHASER'),
+                          Tab(text: 'RUNNER'),
+                        ],
+                      ),
+                      // Stats panels
+                      Expanded(
+                        child: TabBarView(
+                          controller: _statsTabController,
                           children: [
-                            _buildMiniStat('HUNTS', '${profile.totalGamesPlayed}', Icons.track_changes, AppColors.bloodRed),
-                            _buildMiniStat('WINS', '${profile.totalWins}', Icons.emoji_events, AppColors.warningYellow),
-                            _buildMiniStat('DISTANCE', '${profile.totalDistance.toStringAsFixed(0)}m', Icons.explore, AppColors.toxicGreen),
+                            // — OVERALL —
+                            _buildStatRow([
+                              _StatCell('GAMES', '${profile.totalGamesPlayed}', Icons.sports_kabaddi, AppColors.ghostWhite),
+                              _StatCell('WINS', '${profile.totalWins}', Icons.emoji_events, AppColors.warningYellow),
+                              _StatCell('WIN %', '$winRate%', Icons.percent, AppColors.toxicGreen),
+                              _StatCell('DISTANCE', '${profile.totalDistance.toStringAsFixed(0)}m', Icons.explore, AppColors.pulseBlue),
+                            ]),
+                            // — CHASER —
+                            _buildStatRow([
+                              _StatCell('CAPTURES', '${profile.totalCaptures}', Icons.gps_fixed, AppColors.bloodRed),
+                              _StatCell('AVG/GAME', captureRate, Icons.trending_up, AppColors.warningYellow),
+                              _StatCell('LOSSES', '${profile.totalLosses}', Icons.close, AppColors.textMuted),
+                              _StatCell('DISTANCE', '${profile.totalDistance.toStringAsFixed(0)}m', Icons.directions_run, AppColors.toxicGreen),
+                            ]),
+                            // — RUNNER —
+                            _buildStatRow([
+                              _StatCell('ESCAPES', '${profile.totalEscapes}', Icons.directions_run, AppColors.pulseBlue),
+                              _StatCell('CAPTURED', '${profile.totalTimesCaptured}', Icons.lock, AppColors.bloodRed),
+                              _StatCell('WINS', '${profile.totalWins}', Icons.shield, AppColors.toxicGreen),
+                              _StatCell('DISTANCE', '${profile.totalDistance.toStringAsFixed(0)}m', Icons.explore, AppColors.warningYellow),
+                            ]),
                           ],
                         ),
                       ),
                     ],
                   );
                 },
-                loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
-                error: (e, _) => Center(child: Icon(Icons.error, color: AppColors.bloodRed)),
+                loading: () =>
+                    const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
+                error: (e, _) =>
+                    Center(child: Icon(Icons.error, color: AppColors.bloodRed)),
               ),
             ),
           ),
@@ -118,7 +192,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 // Section Header
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   color: AppColors.fogGrey,
                   child: Row(
                     children: [
@@ -135,7 +210,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                 ),
-                
+
                 // List
                 Expanded(
                   child: sessionsAsync.when(
@@ -161,15 +236,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                'IT\'S QUIET AROUND HERE...',
+                                "IT'S QUIET AROUND HERE...",
                                 style: GoogleFonts.specialElite(
                                   color: AppColors.textMuted,
                                   letterSpacing: 1,
                                 ),
                               ),
                               const SizedBox(height: 24),
-                              // Small CTA since FAB handles main creation
-                               OutlinedButton(
+                              OutlinedButton(
                                 onPressed: () => context.push('/create-session'),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppColors.textSecondary,
@@ -195,13 +269,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               color: AppColors.fogGrey,
                               border: Border(
                                 left: BorderSide(
-                                  color: isActive ? AppColors.bloodRed : AppColors.textMuted,
+                                  color: isActive
+                                      ? AppColors.bloodRed
+                                      : AppColors.textMuted,
                                   width: 4,
                                 ),
                               ),
                             ),
                             child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
                               title: Text(
                                 session.name.toUpperCase(),
                                 style: GoogleFonts.jetBrainsMono(
@@ -214,12 +291,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 '${session.memberCount} Players • ${isActive ? 'IN PROGRESS' : 'WAITING'}',
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 12,
-                                  color: isActive ? AppColors.bloodRed : AppColors.textSecondary,
+                                  color: isActive
+                                      ? AppColors.bloodRed
+                                      : AppColors.textSecondary,
                                 ),
                               ),
                               trailing: Icon(
                                 Icons.chevron_right,
-                                color: isActive ? AppColors.bloodRed : AppColors.textMuted,
+                                color:
+                                    isActive ? AppColors.bloodRed : AppColors.textMuted,
                               ),
                               onTap: () => context.push('/session/${session.id}'),
                             ),
@@ -279,6 +359,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Builds a row of 4 stat cells with equal spacing.
+  Widget _buildStatRow(List<_StatCell> cells) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: cells
+            .map(
+              (c) => Expanded(
+                child: _buildMiniStat(c.label, c.value, c.icon, c.color),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildMiniStat(
+      String title, String value, IconData icon, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 22),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppColors.ghostWhite,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          title,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 9,
+            color: AppColors.textSecondary,
+            letterSpacing: 1,
+          ),
+        ),
+      ],
     );
   }
 
@@ -358,7 +483,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   await FirestoreService().joinSessionByCode(code, user.uid);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                       const SnackBar(content: Text('You have entered the zone.')),
+                      const SnackBar(content: Text('You have entered the zone.')),
                     );
                   }
                 }
@@ -372,7 +497,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             },
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.bloodRed,
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             ),
             child: Text(
               'ENTER',
@@ -386,31 +512,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
   }
+}
 
-  Widget _buildMiniStat(String title, String value, IconData icon, Color color) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color, size: 28),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: AppColors.ghostWhite,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          title,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 10,
-            color: AppColors.textSecondary,
-            letterSpacing: 1,
-          ),
-        ),
-      ],
-    );
-  }
+/// Simple data carrier for a stat cell.
+class _StatCell {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+  const _StatCell(this.label, this.value, this.icon, this.color);
 }

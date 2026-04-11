@@ -8,6 +8,7 @@ import 'package:chaser/screens/session/edit_session_sheet.dart';
 import 'package:chaser/services/pedometer_service.dart';
 import 'package:chaser/services/firebase/auth_service.dart';
 import 'package:chaser/services/firebase/firestore_service.dart';
+import 'package:chaser/utils/unit_converter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -237,7 +238,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                     _buildStatusChip(session.status),
                     const SizedBox(height: 12),
                     Text(
-                      '${session.gameMode.toUpperCase()} • ${session.durationDays} DAYS',
+                      '${session.gameMode.toUpperCase()} • ${session.durationDays} ${session.durationUnit.toUpperCase()}',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -309,40 +310,54 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                 collapsedIconColor: AppColors.textSecondary,
                 iconColor: AppColors.bloodRed,
                 children: [
-                   ListTile(
+                  ListTile(
                     dense: true,
                     title: Text(
-                      'Headstart: ${session.headstartDistance}m (${session.headstartDuration} min)',
+                      'Duration: ${session.durationDays} ${session.durationUnit}',
+                      style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
+                    ),
+                    leading: const Icon(Icons.timer_outlined, color: AppColors.warningYellow, size: 20),
+                  ),
+                  ListTile(
+                    dense: true,
+                    title: Text(
+                      'Chasers: ${session.numChasers}',
+                      style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
+                    ),
+                    leading: const Icon(Icons.gps_fixed, color: AppColors.bloodRed, size: 20),
+                  ),
+                  ListTile(
+                    dense: true,
+                    title: Text(
+                      'Headstart: ${(session.headstartDistance > 0 || session.headstartDuration > 0) ? "${UnitConverter.formatDistance(session.headstartDistance, session.headstartDistanceUnit)} / ${UnitConverter.formatDuration(session.headstartDuration, session.headstartDurationUnit)}" : "None"}',
                       style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
                     ),
                     leading: const Icon(Icons.run_circle_outlined, color: AppColors.pulseBlue, size: 20),
                   ),
-                  if (session.restStartHour != session.restEndHour)
-                    ListTile(
-                      dense: true,
-                      title: Text(
-                        'Rest Hours: ${session.restStartHour}:00 - ${session.restEndHour}:00',
-                        style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
-                      ),
-                      leading: const Icon(Icons.bedtime_outlined, color: AppColors.textSecondary, size: 20),
-                    ),
                   ListTile(
                     dense: true,
                     title: Text(
-                      'Capture: ${session.instantCapture ? "Instant Kill" : "Resist ${session.captureResistanceDuration}min"}',
+                      'Rest Hours: ${(session.restStartHour != session.restEndHour) ? "${session.restStartHour}:00 - ${session.restEndHour}:00" : "None"}',
+                      style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
+                    ),
+                    leading: const Icon(Icons.bedtime_outlined, color: AppColors.textSecondary, size: 20),
+                  ),
+                  ListTile(
+                    dense: true,
+                    title: Text(
+                      'Capture: ${session.instantCapture ? "Instant Kill" : "Resist ${UnitConverter.formatDuration(session.captureResistanceDuration, session.captureResistanceDurationUnit)} / ${UnitConverter.formatDistance(session.captureResistanceDistance, session.captureResistanceDistanceUnit)}"}',
                       style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
                     ),
                     leading: const Icon(Icons.touch_app_outlined, color: AppColors.bloodRed, size: 20),
                   ),
-                  if (session.gameMode == 'target')
-                    ListTile(
-                      dense: true,
-                      title: Text(
-                        'Switch Cooldown: ${session.switchCooldown} min',
-                        style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
-                      ),
-                      leading: const Icon(Icons.swap_horiz, color: AppColors.warningYellow, size: 20),
+                  ListTile(
+                    dense: true,
+                    title: Text(
+                      'Switch Cooldown: ${(session.gameMode == 'target') ? "${session.switchCooldown} min" : "None"}',
+                      style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.ghostWhite),
                     ),
+                    leading: const Icon(Icons.swap_horiz, color: AppColors.warningYellow, size: 20),
+                  ),
                 ],
               ),
               const Divider(height: 1, color: AppColors.textMuted),
@@ -461,6 +476,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               _DistanceMonitor(
                 sessionId: widget.sessionId,
                 userId: currentUser?.uid,
+                session: session,
                 startTime: session.actualStartTime?.toDate() ?? session.scheduledStartTime?.toDate() ?? DateTime.now(),
                 baseOffset: (myPlayer?.role == 'runner') ? session.headstartDistance : 0.0,
               ),
@@ -484,7 +500,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                               const SizedBox(width: 6),
                               _GameEndTimer(
                                 endTime: (session.actualStartTime?.toDate() ?? DateTime.now())
-                                    .add(Duration(days: session.durationDays)),
+                                    .add(Duration(minutes: session.durationInMinutes)),
                               ),
                             ],
                           ),
@@ -815,7 +831,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
         backgroundColor: AppColors.fogGrey,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         title: Text(
-          'END THE HUNT?',
+          'END THE CHASE?',
           style: GoogleFonts.creepster(fontSize: 24, color: AppColors.ghostWhite),
         ),
         content: Text(
@@ -834,7 +850,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               foregroundColor: AppColors.voidBlack,
               shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             ),
-            child: Text('END HUNT', style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold)),
+            child: Text('END CHASE', style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -845,7 +861,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
             await _firestoreService.stopGame(sessionId);
              if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Hunt Ended.')),
+                  const SnackBar(content: Text('Chase Ended.')),
                 );
               }
         } catch(e) {
@@ -865,7 +881,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
         backgroundColor: AppColors.fogGrey,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         title: Text(
-          'RESET HUNT?',
+          'RESET CHASE?',
           style: GoogleFonts.creepster(fontSize: 24, color: AppColors.ghostWhite),
         ),
         content: Text(
@@ -895,7 +911,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
             await _firestoreService.resetGame(sessionId);
              if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Hunt Reset.')),
+                  const SnackBar(content: Text('Chase Reset.')),
                 );
               }
         } catch(e) {
@@ -1356,7 +1372,7 @@ class _GameRulesSheet extends StatelessWidget {
               const Icon(Icons.info_outline, color: AppColors.bloodRed),
               const SizedBox(width: 12),
               Text(
-                'HUNT RULES',
+                'CHASE RULES',
                 style: GoogleFonts.creepster(
                   fontSize: 24,
                   color: AppColors.ghostWhite,
@@ -1370,35 +1386,39 @@ class _GameRulesSheet extends StatelessWidget {
           _buildRuleRow(
             Icons.calendar_today,
             'Duration',
-            '${session.durationDays} days',
+            '${session.durationDays} ${session.durationUnit}',
             AppColors.warningYellow,
+          ),
+          _buildRuleRow(
+            Icons.gps_fixed,
+            'Chasers',
+            '${session.numChasers}',
+            AppColors.bloodRed,
           ),
           _buildRuleRow(
             Icons.run_circle_outlined,
             'Headstart',
-            '${session.headstartDistance.toInt()}m (${session.headstartDuration} min)',
+            (session.headstartDistance > 0 || session.headstartDuration > 0) ? '${UnitConverter.formatDistance(session.headstartDistance, session.headstartDistanceUnit)} / ${UnitConverter.formatDuration(session.headstartDuration, session.headstartDurationUnit)}' : 'None',
             AppColors.pulseBlue,
           ),
-          if (session.restStartHour != session.restEndHour)
-            _buildRuleRow(
-              Icons.bedtime_outlined,
-              'Rest Hours',
-              '${session.restStartHour}:00 - ${session.restEndHour}:00',
-              AppColors.textSecondary,
-            ),
+          _buildRuleRow(
+            Icons.bedtime_outlined,
+            'Rest Hours',
+            (session.restStartHour != session.restEndHour) ? '${session.restStartHour}:00 - ${session.restEndHour}:00' : 'None',
+            AppColors.textSecondary,
+          ),
           _buildRuleRow(
             Icons.touch_app_outlined,
             'Capture',
-            session.instantCapture ? 'Instant Kill' : 'Resist ${session.captureResistanceDuration}min',
+            session.instantCapture ? 'Instant Kill' : 'Resist ${UnitConverter.formatDuration(session.captureResistanceDuration, session.captureResistanceDurationUnit)} / ${UnitConverter.formatDistance(session.captureResistanceDistance, session.captureResistanceDistanceUnit)}',
             AppColors.bloodRed,
           ),
-          if (session.gameMode == 'target')
-            _buildRuleRow(
-              Icons.swap_horiz,
-              'Switch Cooldown',
-              '${session.switchCooldown} min',
-              AppColors.warningYellow,
-            ),
+          _buildRuleRow(
+            Icons.swap_horiz,
+            'Switch Cooldown',
+            (session.gameMode == 'target') ? '${session.switchCooldown} min' : 'None',
+            AppColors.warningYellow,
+          ),
           _buildRuleRow(
             Icons.videogame_asset,
             'Game Mode',
@@ -1643,12 +1663,14 @@ class _ChaserCaptureStatus extends ConsumerWidget {
 class _DistanceMonitor extends ConsumerStatefulWidget {
   final String sessionId;
   final String? userId;
+  final SessionModel session;
   final DateTime startTime;
   final double baseOffset;
 
   const _DistanceMonitor({
     required this.sessionId,
     required this.userId,
+    required this.session,
     required this.startTime,
     this.baseOffset = 0.0,
     super.key,
@@ -1661,81 +1683,162 @@ class _DistanceMonitor extends ConsumerStatefulWidget {
 class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
   final PedometerService _pedometerService = PedometerService();
   Timer? _timer;
-  StreamSubscription? _subscription;
-  bool _hasPermissions = false;
 
-  double _currentTotalDistance = 0.0;
-  double _lastStoredDistance = -20.0;
+  // Total verified distance to write to Firestore (starts at baseOffset).
+  double _totalDistance = 0.0;
+
+  // The distance value most recently committed to Firestore.
+  double _lastWrittenDistance = -1.0;
+
+  // The pedometer window: we query from _windowStart to now each tick,
+  // then advance _windowStart = now so the next tick gets only new movement.
+  late DateTime _windowStart;
+
+  // ─── Dynamic thresholds ────────────────────────────────────────────────────
+
+  /// How often (seconds) to poll the pedometer.
+  ///
+  /// Scaled to captureResistanceDuration so we poll at least 8×
+  /// per resistance window. Range: 10–60 s.
+  int get _checkIntervalSecs {
+    final resistanceSecs = widget.session.captureResistanceDuration * 60;
+    if (resistanceSecs <= 0) return 10;
+    return (resistanceSecs / 8).clamp(10, 60).toInt();
+  }
+
+  /// Minimum movement (metres) in a single check window to count as real
+  /// walking (anti-pocket-shuffle noise gate).
+  ///
+  /// Must stay well below captureResistanceDistance so we never discard
+  /// movement that closes the gap between two players. Capped at the
+  /// smaller of captureDistance/10 or 5 m.
+  double get _noiseGateMeters {
+    const absoluteMax = 5.0;
+    const absoluteMin = 2.0;
+    final captureDist = widget.session.captureResistanceDistance;
+    if (captureDist <= 0) return absoluteMin; // instant-capture: minimal gate
+    // Allow at most 1/10th of the capture radius per window to be discarded.
+    final captureBound = captureDist / 10.0;
+    return captureBound.clamp(absoluteMin, absoluteMax);
+  }
+
+  /// Minimum accumulated movement (metres) before writing to Firestore.
+  ///
+  /// Driven by two competing needs:
+  ///  - Long-game efficiency  → write less often (push threshold up)
+  ///  - Capture accuracy      → write before players cross the zone (push down)
+  ///
+  /// Rule: always at most captureResistanceDistance / 4.
+  /// That guarantees at least 4 positional updates while two players close
+  /// from capture-range to contact, so the server never misses the window.
+  double get _writeThresholdMeters {
+    // Duration-based upper bound: e.g. 7-day game → 100 m, 10-min test → 5 m.
+    final durationBound = (widget.session.durationInMinutes / 100.0).clamp(5.0, 100.0);
+
+    final captureDist = widget.session.captureResistanceDistance;
+    if (captureDist <= 0) return durationBound; // instant-capture: pure duration bound
+
+    // Capture-accuracy bound: write at least every ¼ of capture distance.
+    final captureBound = captureDist / 4.0;
+
+    // Take whichever is tighter.
+    return durationBound < captureBound ? durationBound : captureBound;
+  }
+
+  // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
+    _totalDistance = widget.baseOffset;
+    _lastWrittenDistance = widget.baseOffset - 1; // ensure first write fires
+    _windowStart = widget.startTime;
     _initPedometer();
   }
 
   Future<void> _initPedometer() async {
-    _hasPermissions = await _pedometerService.requestPermissions();
-    if (_hasPermissions && mounted) {
-      _subscription = _pedometerService.getPedometerStream(widget.startTime).listen((data) {
-          try {
-             final dynamic distVal = data.distance;
-             if (distVal != null && distVal is num) {
-                 final double pedometerDist = distVal.toDouble();
-                 if (mounted) {
-                   final total = widget.baseOffset + pedometerDist;
-                   setState(() {
-                     _currentTotalDistance = total;
-                   });
-                   ref.read(localDistanceProvider.notifier).update(total);
-                 }
-             }
-          } catch (e) {
-             debugPrint("DistanceMonitor: Stream Processing Error: $e");
-          }
-      }, onError: (e) {
-          debugPrint("DistanceMonitor: Stream Error: $e");
-      });
+    final hasPerms = await _pedometerService.requestPermissions();
+    if (!hasPerms || !mounted) return;
 
-      _timer = Timer.periodic(const Duration(seconds: 10), _checkAndWriteDistance);
-      _checkAndWriteDistance(null);
-    }
+    debugPrint(
+      'DistanceMonitor: interval=${_checkIntervalSecs}s  '
+      'noiseGate=${_noiseGateMeters.toStringAsFixed(1)}m  '
+      'writeThreshold=${_writeThresholdMeters.toStringAsFixed(1)}m',
+    );
+
+    _timer = Timer.periodic(Duration(seconds: _checkIntervalSecs), (_) => _tick());
+    _tick(); // immediate first check
   }
 
-  Future<void> _checkAndWriteDistance(Timer? t) async {
-    if (widget.userId == null) return;
+  /// One polling cycle:
+  ///  1. Query pedometer for movement in [_windowStart, now].
+  ///  2. Advance window so next tick starts fresh.
+  ///  3. Discard if below noise gate (pocket shuffle filter).
+  ///  4. Otherwise add to running total and write if threshold crossed.
+  Future<void> _tick() async {
+    if (widget.userId == null || !mounted) return;
 
+    final now = DateTime.now();
+    final windowEnd = now;
+
+    double intervalDist = 0.0;
     try {
-        final double pedometerDist = await _pedometerService.getDistance(widget.startTime, DateTime.now());
-        if (mounted) {
-           _currentTotalDistance = widget.baseOffset + pedometerDist;
-        }
+      intervalDist = await _pedometerService.getDistance(_windowStart, windowEnd);
     } catch (e) {
-        debugPrint("DistanceMonitor: Poll Error: $e");
+      debugPrint('DistanceMonitor: pedometer error: $e');
     }
 
-    final double diff = (_currentTotalDistance - _lastStoredDistance).abs();
+    // Advance window BEFORE any early returns so the next tick always has a
+    // fresh window even if this tick produced no qualifying movement.
+    _windowStart = windowEnd;
 
-    if (diff > 10.0) {
-        debugPrint("DistanceMonitor: Threshold met (Diff: ${diff.toStringAsFixed(1)}m). Writing: ${_currentTotalDistance.toStringAsFixed(1)}m");
-        await _updateFirestore(_currentTotalDistance);
-        _lastStoredDistance = _currentTotalDistance;
+    // ── Noise gate ──────────────────────────────────────────────────────────
+    if (intervalDist < _noiseGateMeters) {
+      debugPrint(
+        'DistanceMonitor: interval=${intervalDist.toStringAsFixed(1)}m '
+        '< gate=${_noiseGateMeters.toStringAsFixed(1)}m — discarded',
+      );
+      return; // pocket shuffle / minimal movement — don't count it
+    }
+
+    // ── Accumulate verified movement ────────────────────────────────────────
+    if (mounted) {
+      _totalDistance += intervalDist;
+      ref.read(localDistanceProvider.notifier).update(_totalDistance);
+      debugPrint(
+        'DistanceMonitor: +${intervalDist.toStringAsFixed(1)}m  '
+        'total=${_totalDistance.toStringAsFixed(1)}m',
+      );
+    }
+
+    // ── Write threshold ─────────────────────────────────────────────────────
+    final delta = (_totalDistance - _lastWrittenDistance).abs();
+    if (delta >= _writeThresholdMeters) {
+      debugPrint(
+        'DistanceMonitor: writing ${_totalDistance.toStringAsFixed(1)}m '
+        '(delta=${delta.toStringAsFixed(1)}m)',
+      );
+      await _updateFirestore(_totalDistance);
+      _lastWrittenDistance = _totalDistance;
     }
   }
 
   Future<void> _updateFirestore(double dist) async {
     if (widget.userId == null || !mounted) return;
-    await FirestoreService().updatePlayerDistance(widget.sessionId, widget.userId!, dist);
+    await FirestoreService().updatePlayerDistance(
+      widget.sessionId,
+      widget.userId!,
+      dist,
+    );
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _subscription?.cancel();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return const SizedBox.shrink();
-  }
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
+

@@ -98,7 +98,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'HUNTER PROFILE',
+          'PLAYER PROFILE',
           style: GoogleFonts.creepster(
             fontSize: 24,
             letterSpacing: 2,
@@ -120,7 +120,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           if (userProfile == null) {
             return Center(
               child: Text(
-                'Hunter profile not found.',
+                'Player profile not found.',
                 style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary),
               ),
             );
@@ -164,7 +164,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               controller: _nameController,
                               style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
                               decoration: InputDecoration(
-                                labelText: 'HUNTER NAME',
+                                labelText: 'DISPLAY NAME',
                                 labelStyle: GoogleFonts.jetBrainsMono(
                                   color: AppColors.textSecondary,
                                   letterSpacing: 2,
@@ -270,7 +270,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       mainAxisSpacing: 12,
                       childAspectRatio: 1.5,
                       children: [
-                        _buildStatCard('HUNTS', '${playerProfile.totalGamesPlayed}', Icons.track_changes, AppColors.bloodRed),
+                        _buildStatCard('CHASES', '${playerProfile.totalGamesPlayed}', Icons.track_changes, AppColors.bloodRed),
                         _buildStatCard('VICTORIES', '${playerProfile.totalWins}', Icons.emoji_events, AppColors.warningYellow),
                         _buildStatCard('CAPTURES', '${playerProfile.totalCaptures}', Icons.gps_fixed, AppColors.bloodRed),
                         _buildStatCard('ESCAPES', '${playerProfile.totalEscapes}', Icons.directions_run, AppColors.pulseBlue),
