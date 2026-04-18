@@ -296,7 +296,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               subtitle: Consumer(
                                 builder: (context, ref, _) {
                                   final countAsync = ref.watch(sessionMemberCountProvider(session.id));
-                                  final count = countAsync.valueOrNull ?? session.memberCount;
+                                  final count = countAsync.value ?? session.memberCount;
                                   return Text(
                                     '$count Players • ${isActive ? 'IN PROGRESS' : 'WAITING'}',
                                     style: GoogleFonts.jetBrainsMono(
