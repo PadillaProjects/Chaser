@@ -8,6 +8,7 @@ import 'package:chaser/screens/session/edit_session_sheet.dart';
 import 'package:chaser/services/pedometer_service.dart';
 import 'package:chaser/services/firebase/auth_service.dart';
 import 'package:chaser/services/firebase/firestore_service.dart';
+import 'package:chaser/utils/distance_tracker.dart';
 import 'package:chaser/utils/unit_converter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -477,6 +478,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                 sessionId: widget.sessionId,
                 userId: currentUser?.uid,
                 session: session,
+                players: players,
                 startTime: session.actualStartTime?.toDate() ?? session.scheduledStartTime?.toDate() ?? DateTime.now(),
                 baseOffset: (myPlayer?.role == 'runner') ? session.headstartDistance : 0.0,
               ),
@@ -1109,11 +1111,14 @@ class SessionPlayerTile extends ConsumerWidget {
                 builder: (context, ref, child) {
                     final otherPlayerStats = ref.watch(otherPlayerProfileFamily(userId));
                     final sessionPlayersAsync = ref.watch(playersStreamProvider(sessionId));
+                    final sessionAsync = ref.watch(sessionDetailsProvider(sessionId));
 
                     final livePlayer = sessionPlayersAsync.asData?.value
                         .where((p) => p.userId == userId)
                         .firstOrNull;
                     final liveDistance = livePlayer?.currentDistance ?? 0.0;
+                    final livePlayers = sessionPlayersAsync.asData?.value ?? [];
+                    final liveSession = sessionAsync.asData?.value;
 
                     return otherPlayerStats.when(
                         data: (stats) {
@@ -1137,19 +1142,31 @@ class SessionPlayerTile extends ConsumerWidget {
                                     const Divider(color: AppColors.textMuted),
                                     Text('DEBUG', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppColors.textMuted, letterSpacing: 2)),
                                     _statRow('Current Distance', '${liveDistance.toStringAsFixed(1)}m'),
-                                    Row(
+                                    if (liveSession != null) Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                       children: [
                                         IconButton(
                                           icon: const Icon(Icons.remove_circle_outline, color: AppColors.bloodRed),
-                                          onPressed: () => _updateDistance(liveDistance, -1.0),
+                                          onPressed: () => _updateDistance(
+                                            liveDistance, -1.0,
+                                            session: liveSession,
+                                            players: livePlayers,
+                                          ),
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.add_circle_outline, color: AppColors.toxicGreen),
-                                          onPressed: () => _updateDistance(liveDistance, 1.0),
+                                          onPressed: () => _updateDistance(
+                                            liveDistance, 1.0,
+                                            session: liveSession,
+                                            players: livePlayers,
+                                          ),
                                         ),
                                         TextButton(
-                                          onPressed: () => _setDistanceDialog(context, liveDistance),
+                                          onPressed: () => _setDistanceDialog(
+                                            context, liveDistance,
+                                            session: liveSession,
+                                            players: livePlayers,
+                                          ),
                                           child: Text('SET', style: GoogleFonts.jetBrainsMono(color: AppColors.pulseBlue)),
                                         ),
                                       ],
@@ -1185,12 +1202,26 @@ class SessionPlayerTile extends ConsumerWidget {
     );
   }
 
-  Future<void> _updateDistance(double currentDist, double delta) async {
+  Future<void> _updateDistance(
+    double currentDist,
+    double delta, {
+    required SessionModel session,
+    required List<PlayerModel> players,
+  }) async {
       final newDistance = (currentDist + delta) < 0 ? 0.0 : (currentDist + delta);
-      await FirestoreService().updatePlayerDistance(sessionId, userId, newDistance);
+      await FirestoreService().updatePlayerDistance(
+        sessionId, userId, newDistance,
+        session: session,
+        players: players,
+      );
   }
 
-  Future<void> _setDistanceDialog(BuildContext context, double currentDist) async {
+  Future<void> _setDistanceDialog(
+    BuildContext context,
+    double currentDist, {
+    required SessionModel session,
+    required List<PlayerModel> players,
+  }) async {
       final controller = TextEditingController(text: currentDist.toStringAsFixed(1));
 
       await showDialog(
@@ -1203,12 +1234,9 @@ class SessionPlayerTile extends ConsumerWidget {
                   controller: controller,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
-                  decoration: InputDecoration(
-                    labelText: 'Distance (meters)',
-                    labelStyle: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary),
-                    filled: true,
-                    fillColor: AppColors.voidBlack,
-                    border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+                  decoration: const InputDecoration(
+                    labelText: 'Distance (m)',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.zero),
                   ),
               ),
               actions: [
@@ -1220,7 +1248,11 @@ class SessionPlayerTile extends ConsumerWidget {
                       onPressed: () async {
                           final val = double.tryParse(controller.text);
                           if (val != null) {
-                              await FirestoreService().updatePlayerDistance(sessionId, userId, val);
+                              await FirestoreService().updatePlayerDistance(
+                                sessionId, userId, val,
+                                session: session,
+                                players: players,
+                              );
                               if (context.mounted) Navigator.pop(context);
                           }
                       },
@@ -1235,6 +1267,7 @@ class SessionPlayerTile extends ConsumerWidget {
       );
   }
 }
+
 
 class _HeadstartTimer extends StatefulWidget {
     final DateTime endTime;
@@ -1664,6 +1697,7 @@ class _DistanceMonitor extends ConsumerStatefulWidget {
   final String sessionId;
   final String? userId;
   final SessionModel session;
+  final List<PlayerModel> players;
   final DateTime startTime;
   final double baseOffset;
 
@@ -1671,6 +1705,7 @@ class _DistanceMonitor extends ConsumerStatefulWidget {
     required this.sessionId,
     required this.userId,
     required this.session,
+    required this.players,
     required this.startTime,
     this.baseOffset = 0.0,
     super.key,
@@ -1683,75 +1718,23 @@ class _DistanceMonitor extends ConsumerStatefulWidget {
 class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
   final PedometerService _pedometerService = PedometerService();
   Timer? _timer;
+  late DistanceTracker _tracker;
 
-  // Total verified distance to write to Firestore (starts at baseOffset).
-  double _totalDistance = 0.0;
-
-  // The distance value most recently committed to Firestore.
-  double _lastWrittenDistance = -1.0;
-
-  // The pedometer window: we query from _windowStart to now each tick,
-  // then advance _windowStart = now so the next tick gets only new movement.
+  // Pedometer window: advances each tick so readings are interval-only.
   late DateTime _windowStart;
-
-  // ─── Dynamic thresholds ────────────────────────────────────────────────────
-
-  /// How often (seconds) to poll the pedometer.
-  ///
-  /// Scaled to captureResistanceDuration so we poll at least 8×
-  /// per resistance window. Range: 10–60 s.
-  int get _checkIntervalSecs {
-    final resistanceSecs = widget.session.captureResistanceDuration * 60;
-    if (resistanceSecs <= 0) return 10;
-    return (resistanceSecs / 8).clamp(10, 60).toInt();
-  }
-
-  /// Minimum movement (metres) in a single check window to count as real
-  /// walking (anti-pocket-shuffle noise gate).
-  ///
-  /// Must stay well below captureResistanceDistance so we never discard
-  /// movement that closes the gap between two players. Capped at the
-  /// smaller of captureDistance/10 or 5 m.
-  double get _noiseGateMeters {
-    const absoluteMax = 5.0;
-    const absoluteMin = 2.0;
-    final captureDist = widget.session.captureResistanceDistance;
-    if (captureDist <= 0) return absoluteMin; // instant-capture: minimal gate
-    // Allow at most 1/10th of the capture radius per window to be discarded.
-    final captureBound = captureDist / 10.0;
-    return captureBound.clamp(absoluteMin, absoluteMax);
-  }
-
-  /// Minimum accumulated movement (metres) before writing to Firestore.
-  ///
-  /// Driven by two competing needs:
-  ///  - Long-game efficiency  → write less often (push threshold up)
-  ///  - Capture accuracy      → write before players cross the zone (push down)
-  ///
-  /// Rule: always at most captureResistanceDistance / 4.
-  /// That guarantees at least 4 positional updates while two players close
-  /// from capture-range to contact, so the server never misses the window.
-  double get _writeThresholdMeters {
-    // Duration-based upper bound: e.g. 7-day game → 100 m, 10-min test → 5 m.
-    final durationBound = (widget.session.durationInMinutes / 100.0).clamp(5.0, 100.0);
-
-    final captureDist = widget.session.captureResistanceDistance;
-    if (captureDist <= 0) return durationBound; // instant-capture: pure duration bound
-
-    // Capture-accuracy bound: write at least every ¼ of capture distance.
-    final captureBound = captureDist / 4.0;
-
-    // Take whichever is tighter.
-    return durationBound < captureBound ? durationBound : captureBound;
-  }
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _totalDistance = widget.baseOffset;
-    _lastWrittenDistance = widget.baseOffset - 1; // ensure first write fires
+    final s = widget.session;
+    _tracker = DistanceTracker(
+      captureResistanceDistance: s.captureResistanceDistance,
+      captureResistanceDuration: s.captureResistanceDuration,
+      durationInMinutes: s.durationInMinutes,
+      baseOffset: widget.baseOffset,
+    );
     _windowStart = widget.startTime;
     _initPedometer();
   }
@@ -1761,66 +1744,48 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
     if (!hasPerms || !mounted) return;
 
     debugPrint(
-      'DistanceMonitor: interval=${_checkIntervalSecs}s  '
-      'noiseGate=${_noiseGateMeters.toStringAsFixed(1)}m  '
-      'writeThreshold=${_writeThresholdMeters.toStringAsFixed(1)}m',
+      'DistanceMonitor: interval=${_tracker.checkIntervalSecs}s  '
+      'noiseGate=${_tracker.noiseGateMeters.toStringAsFixed(1)}m  '
+      'writeThreshold=${_tracker.writeThresholdMeters.toStringAsFixed(1)}m',
     );
 
-    _timer = Timer.periodic(Duration(seconds: _checkIntervalSecs), (_) => _tick());
+    _timer = Timer.periodic(
+      Duration(seconds: _tracker.checkIntervalSecs),
+      (_) => _tick(),
+    );
     _tick(); // immediate first check
   }
 
-  /// One polling cycle:
-  ///  1. Query pedometer for movement in [_windowStart, now].
-  ///  2. Advance window so next tick starts fresh.
-  ///  3. Discard if below noise gate (pocket shuffle filter).
-  ///  4. Otherwise add to running total and write if threshold crossed.
+  /// One polling cycle — delegates all math to [DistanceTracker.tick].
   Future<void> _tick() async {
     if (widget.userId == null || !mounted) return;
 
     final now = DateTime.now();
-    final windowEnd = now;
-
     double intervalDist = 0.0;
     try {
-      intervalDist = await _pedometerService.getDistance(_windowStart, windowEnd);
+      intervalDist = await _pedometerService.getDistance(_windowStart, now);
     } catch (e) {
       debugPrint('DistanceMonitor: pedometer error: $e');
     }
+    // Always advance window so the next tick gets fresh data.
+    _windowStart = now;
 
-    // Advance window BEFORE any early returns so the next tick always has a
-    // fresh window even if this tick produced no qualifying movement.
-    _windowStart = windowEnd;
+    final writeValue = _tracker.tick(intervalMeters: intervalDist);
 
-    // ── Noise gate ──────────────────────────────────────────────────────────
-    if (intervalDist < _noiseGateMeters) {
+    if (writeValue == null) {
       debugPrint(
-        'DistanceMonitor: interval=${intervalDist.toStringAsFixed(1)}m '
-        '< gate=${_noiseGateMeters.toStringAsFixed(1)}m — discarded',
+        'DistanceMonitor: ${intervalDist.toStringAsFixed(1)}m — no write '
+        '(gate=${_tracker.noiseGateMeters.toStringAsFixed(1)}m, '
+        'threshold=${_tracker.writeThresholdMeters.toStringAsFixed(1)}m)',
       );
-      return; // pocket shuffle / minimal movement — don't count it
+      return;
     }
 
-    // ── Accumulate verified movement ────────────────────────────────────────
-    if (mounted) {
-      _totalDistance += intervalDist;
-      ref.read(localDistanceProvider.notifier).update(_totalDistance);
-      debugPrint(
-        'DistanceMonitor: +${intervalDist.toStringAsFixed(1)}m  '
-        'total=${_totalDistance.toStringAsFixed(1)}m',
-      );
-    }
+    // Update local UI state.
+    if (mounted) ref.read(localDistanceProvider.notifier).update(writeValue);
 
-    // ── Write threshold ─────────────────────────────────────────────────────
-    final delta = (_totalDistance - _lastWrittenDistance).abs();
-    if (delta >= _writeThresholdMeters) {
-      debugPrint(
-        'DistanceMonitor: writing ${_totalDistance.toStringAsFixed(1)}m '
-        '(delta=${delta.toStringAsFixed(1)}m)',
-      );
-      await _updateFirestore(_totalDistance);
-      _lastWrittenDistance = _totalDistance;
-    }
+    debugPrint('DistanceMonitor: writing ${writeValue.toStringAsFixed(1)}m');
+    await _updateFirestore(writeValue);
   }
 
   Future<void> _updateFirestore(double dist) async {
@@ -1829,6 +1794,8 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
       widget.sessionId,
       widget.userId!,
       dist,
+      session: widget.session,
+      players: widget.players,
     );
   }
 

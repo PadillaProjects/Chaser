@@ -327,40 +327,31 @@ class FirestoreService {
 
   }
 
-  Future<void> updatePlayerDistance(String sessionId, String userId, double newDistance) async {
-      // 1. Fetch Session & Players to check rules
-      final sessionDoc = await _firestore.collection('sessions').doc(sessionId).get();
-      if (!sessionDoc.exists) return;
-      final session = SessionModel.fromFirestore(sessionDoc);
-      
-      final membersSnap = await _firestore
-          .collection('session_members')
-          .where('session_id', isEqualTo: sessionId)
-          .get();
-          
-      final players = membersSnap.docs.map((d) => PlayerModel.fromFirestore(d)).toList();
-      
-      // 2. Identify Current State & Update Distance
-      final updatedPlayerIndex = players.indexWhere((p) => p.userId == userId);
-      if (updatedPlayerIndex == -1) return;
-      
-      final updatedPlayer = players[updatedPlayerIndex];
-      
+  Future<void> updatePlayerDistance(
+    String sessionId,
+    String userId,
+    double newDistance, {
+    required SessionModel session,
+    required List<PlayerModel> players,
+  }) async {
+      // Identify the player's Firestore doc from the pre-loaded list.
+      final updatedPlayer = players.firstWhereOrNull((p) => p.userId == userId);
+      if (updatedPlayer == null) return;
+
       final batch = _firestore.batch();
-      
-      // Update the player's distance specifically
+
+      // Update this player's distance.
       final myDocRef = _firestore.collection('session_members').doc(updatedPlayer.sessionMemberId);
       batch.update(myDocRef, {'current_distance': newDistance});
 
-      // 3. Run Logic
+      // Run game logic against the caller-supplied data — no extra reads.
       final result = await _runGameLogic(session, players, batch, userId, newDistance);
-      
+
       if (result.endReason != null) {
           await _calculateAndSaveResults(session, result.finalPlayers, batch, result.endReason!);
       }
-      
-      await batch.commit();
 
+      await batch.commit();
   }
 
   Future<GameLogicResult> _runGameLogic(SessionModel session, List<PlayerModel> players, WriteBatch batch, String? updatingUserId, double? newDistance) async {
