@@ -5,6 +5,7 @@ import 'package:chaser/models/session.dart';
 import 'package:chaser/models/user_profile.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/character/character_profile.dart'; // Added import
+import 'package:collection/collection.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;

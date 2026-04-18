@@ -1111,7 +1111,7 @@ class SessionPlayerTile extends ConsumerWidget {
                 builder: (context, ref, child) {
                     final otherPlayerStats = ref.watch(otherPlayerProfileFamily(userId));
                     final sessionPlayersAsync = ref.watch(playersStreamProvider(sessionId));
-                    final sessionAsync = ref.watch(sessionDetailsProvider(sessionId));
+                    final sessionAsync = ref.watch(sessionStreamProvider(sessionId));
 
                     final livePlayer = sessionPlayersAsync.asData?.value
                         .where((p) => p.userId == userId)
