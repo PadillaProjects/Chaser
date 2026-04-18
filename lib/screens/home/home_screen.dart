@@ -12,6 +12,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:chaser/providers/user_provider.dart';
 import 'package:chaser/models/player_profile.dart';
 
+/// Live member count for a session — watches the real session_members
+/// collection so the home screen updates when anyone joins or leaves.
+final sessionMemberCountProvider = StreamProvider.family<int, String>((ref, sessionId) {
+  return FirestoreService().watchSessionPlayers(sessionId).map((players) => players.length);
+});
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -256,7 +262,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         );
                       }
 
-                      return ListView.builder(
+                          return ListView.builder(
                         padding: const EdgeInsets.all(16),
                         itemCount: sessions.length,
                         itemBuilder: (context, index) {
@@ -287,14 +293,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                   letterSpacing: 1,
                                 ),
                               ),
-                              subtitle: Text(
-                                '${session.memberCount} Players • ${isActive ? 'IN PROGRESS' : 'WAITING'}',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 12,
-                                  color: isActive
-                                      ? AppColors.bloodRed
-                                      : AppColors.textSecondary,
-                                ),
+                              subtitle: Consumer(
+                                builder: (context, ref, _) {
+                                  final countAsync = ref.watch(sessionMemberCountProvider(session.id));
+                                  final count = countAsync.valueOrNull ?? session.memberCount;
+                                  return Text(
+                                    '$count Players • ${isActive ? 'IN PROGRESS' : 'WAITING'}',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 12,
+                                      color: isActive
+                                          ? AppColors.bloodRed
+                                          : AppColors.textSecondary,
+                                    ),
+                                  );
+                                },
                               ),
                               trailing: Icon(
                                 Icons.chevron_right,

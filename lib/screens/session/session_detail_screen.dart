@@ -472,6 +472,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
             _GameLoopMonitor(
               sessionId: widget.sessionId,
               players: players,
+              currentUserId: currentUser?.uid,
             ),
             if (session.actualStartTime != null || session.scheduledStartTime != null)
               _DistanceMonitor(
@@ -1111,14 +1112,11 @@ class SessionPlayerTile extends ConsumerWidget {
                 builder: (context, ref, child) {
                     final otherPlayerStats = ref.watch(otherPlayerProfileFamily(userId));
                     final sessionPlayersAsync = ref.watch(playersStreamProvider(sessionId));
-                    final sessionAsync = ref.watch(sessionStreamProvider(sessionId));
 
                     final livePlayer = sessionPlayersAsync.asData?.value
                         .where((p) => p.userId == userId)
                         .firstOrNull;
                     final liveDistance = livePlayer?.currentDistance ?? 0.0;
-                    final livePlayers = sessionPlayersAsync.asData?.value ?? [];
-                    final liveSession = sessionAsync.asData?.value;
 
                     return otherPlayerStats.when(
                         data: (stats) {
@@ -1142,30 +1140,24 @@ class SessionPlayerTile extends ConsumerWidget {
                                     const Divider(color: AppColors.textMuted),
                                     Text('DEBUG', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppColors.textMuted, letterSpacing: 2)),
                                     _statRow('Current Distance', '${liveDistance.toStringAsFixed(1)}m'),
-                                    if (liveSession != null) Row(
+                                    Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                       children: [
                                         IconButton(
                                           icon: const Icon(Icons.remove_circle_outline, color: AppColors.bloodRed),
                                           onPressed: () => _updateDistance(
                                             liveDistance, -1.0,
-                                            session: liveSession,
-                                            players: livePlayers,
                                           ),
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.add_circle_outline, color: AppColors.toxicGreen),
                                           onPressed: () => _updateDistance(
                                             liveDistance, 1.0,
-                                            session: liveSession,
-                                            players: livePlayers,
                                           ),
                                         ),
                                         TextButton(
                                           onPressed: () => _setDistanceDialog(
                                             context, liveDistance,
-                                            session: liveSession,
-                                            players: livePlayers,
                                           ),
                                           child: Text('SET', style: GoogleFonts.jetBrainsMono(color: AppColors.pulseBlue)),
                                         ),
@@ -1204,24 +1196,19 @@ class SessionPlayerTile extends ConsumerWidget {
 
   Future<void> _updateDistance(
     double currentDist,
-    double delta, {
-    required SessionModel session,
-    required List<PlayerModel> players,
-  }) async {
+    double delta,
+  ) async {
       final newDistance = (currentDist + delta) < 0 ? 0.0 : (currentDist + delta);
-      await FirestoreService().updatePlayerDistance(
+      // Debug controls: simple distance write, no game logic.
+      await FirestoreService().updateDistanceOnly(
         sessionId, userId, newDistance,
-        session: session,
-        players: players,
       );
   }
 
   Future<void> _setDistanceDialog(
     BuildContext context,
-    double currentDist, {
-    required SessionModel session,
-    required List<PlayerModel> players,
-  }) async {
+    double currentDist,
+  ) async {
       final controller = TextEditingController(text: currentDist.toStringAsFixed(1));
 
       await showDialog(
@@ -1248,10 +1235,9 @@ class SessionPlayerTile extends ConsumerWidget {
                       onPressed: () async {
                           final val = double.tryParse(controller.text);
                           if (val != null) {
-                              await FirestoreService().updatePlayerDistance(
+                              // Debug: simple distance write, no game logic.
+                              await FirestoreService().updateDistanceOnly(
                                 sessionId, userId, val,
-                                session: session,
-                                players: players,
                               );
                               if (context.mounted) Navigator.pop(context);
                           }
@@ -1553,13 +1539,25 @@ class _CaptureTimerState extends State<_CaptureTimer> {
     }
 }
 
+/// Returns the userId of the "primary chaser" — the single chaser device
+/// responsible for running game logic. All clients compute the same value
+/// from the player list (deterministic sort by sessionMemberId).
+String? getPrimaryChaserId(List<PlayerModel> players) {
+  final chasers = players.where((p) => p.role == 'chaser').toList();
+  if (chasers.isEmpty) return null;
+  chasers.sort((a, b) => a.sessionMemberId.compareTo(b.sessionMemberId));
+  return chasers.first.userId;
+}
+
 class _GameLoopMonitor extends StatefulWidget {
   final String sessionId;
   final List<PlayerModel> players;
+  final String? currentUserId;
 
   const _GameLoopMonitor({
     required this.sessionId,
     required this.players,
+    required this.currentUserId,
     Key? key,
   }) : super(key: key);
 
@@ -1571,10 +1569,20 @@ class _GameLoopMonitorState extends State<_GameLoopMonitor> {
   Timer? _monitorTimer;
   bool _isTriggering = false;
 
+  bool get _isPrimaryChaser =>
+      widget.currentUserId != null &&
+      getPrimaryChaserId(widget.players) == widget.currentUserId;
+
   @override
   void initState() {
     super.initState();
-    _monitorTimer = Timer.periodic(const Duration(seconds: 2), _checkDeadlines);
+    // Primary chaser polls aggressively (2 s).
+    // Everyone else runs a fallback heartbeat (60 s) in case the
+    // primary chaser's device drops.
+    final interval = _isPrimaryChaser
+        ? const Duration(seconds: 2)
+        : const Duration(seconds: 60);
+    _monitorTimer = Timer.periodic(interval, _checkDeadlines);
   }
 
   @override
@@ -1594,16 +1602,33 @@ class _GameLoopMonitorState extends State<_GameLoopMonitor> {
           player.captureState == 'being_chased' &&
           player.captureDeadline != null) {
 
-          if (now.isAfter(player.captureDeadline!.toDate())) {
-            needsTrigger = true;
-            break;
+          final deadline = player.captureDeadline!.toDate();
+          if (now.isAfter(deadline)) {
+            if (_isPrimaryChaser) {
+              // Primary chaser: handle immediately.
+              needsTrigger = true;
+              break;
+            } else if (now.difference(deadline).inSeconds > 60) {
+              // Fallback: deadline has been stale for >60 s, meaning the
+              // primary chaser likely went offline. Pick it up.
+              debugPrint('GameLoopMonitor: Fallback — stale deadline detected, taking over.');
+              needsTrigger = true;
+              break;
+            }
           }
       }
     }
 
+    // Primary chaser also runs a periodic capture check even without
+    // expired deadlines, to handle pure-distance captures that don't
+    // involve the resistance timer.
+    if (!needsTrigger && _isPrimaryChaser) {
+      // Run a lightweight check every cycle to keep game state consistent.
+      needsTrigger = true;
+    }
+
     if (needsTrigger) {
       _isTriggering = true;
-      debugPrint("GameLoopMonitor: Detected expired deadline. Triggering capture check...");
       try {
         await FirestoreService().triggerCaptureCheck(widget.sessionId);
       } catch (e) {
@@ -1790,13 +1815,24 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
 
   Future<void> _updateFirestore(double dist) async {
     if (widget.userId == null || !mounted) return;
-    await FirestoreService().updatePlayerDistance(
-      widget.sessionId,
-      widget.userId!,
-      dist,
-      session: widget.session,
-      players: widget.players,
-    );
+
+    final isPrimary = getPrimaryChaserId(widget.players) == widget.userId;
+
+    if (isPrimary) {
+      // Primary chaser: write distance + run full game logic with fresh data.
+      await FirestoreService().triggerCaptureCheck(
+        widget.sessionId,
+        updatingUserId: widget.userId,
+        newDistance: dist,
+      );
+    } else {
+      // Everyone else: simple distance write, no game logic.
+      await FirestoreService().updateDistanceOnly(
+        widget.sessionId,
+        widget.userId!,
+        dist,
+      );
+    }
   }
 
   @override

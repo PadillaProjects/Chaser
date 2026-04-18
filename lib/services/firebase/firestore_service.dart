@@ -305,10 +305,32 @@ class FirestoreService {
     await batch.commit();
   }
 
-  Future<void> triggerCaptureCheck(String sessionId) async {
+  /// Simple distance write — no game logic. Used by runners and non-primary
+  /// chasers so they never trigger capture/end-game checks.
+  Future<void> updateDistanceOnly(String sessionId, String userId, double newDistance) async {
+      final docId = '${sessionId}_$userId';
+      await _firestore.collection('session_members').doc(docId).update({
+          'current_distance': newDistance,
+      });
+  }
+
+  /// Fetches **fresh** session + player data from Firestore and runs the full
+  /// game-logic pass (captures, end-game). Only the primary chaser's device
+  /// should call this on every tick; other clients use it as a fallback.
+  ///
+  /// [updatingUserId] / [newDistance] — if set, the caller's own distance
+  /// update is written in the same atomic batch so it's visible to the logic.
+  Future<void> triggerCaptureCheck(
+    String sessionId, {
+    String? updatingUserId,
+    double? newDistance,
+  }) async {
       final sessionDoc = await _firestore.collection('sessions').doc(sessionId).get();
       if (!sessionDoc.exists) return;
       final session = SessionModel.fromFirestore(sessionDoc);
+
+      // Don't run game logic on a game that's already over.
+      if (session.status != 'active') return;
       
       final membersSnap = await _firestore
           .collection('session_members')
@@ -318,40 +340,23 @@ class FirestoreService {
       final players = membersSnap.docs.map((d) => PlayerModel.fromFirestore(d)).toList();
       
       final batch = _firestore.batch();
-      final result = await _runGameLogic(session, players, batch, null, null);
+
+      // Include distance write in the same batch if provided.
+      if (updatingUserId != null && newDistance != null) {
+          final myDoc = membersSnap.docs.firstWhereOrNull(
+              (d) => (d.data())['user_id'] == updatingUserId,
+          );
+          if (myDoc != null) {
+              batch.update(myDoc.reference, {'current_distance': newDistance});
+          }
+      }
+      
+      final result = await _runGameLogic(session, players, batch, updatingUserId, newDistance);
       
       if (result.endReason != null) {
           await _calculateAndSaveResults(session, result.finalPlayers, batch, result.endReason!);
       }
       
-      await batch.commit();
-
-  }
-
-  Future<void> updatePlayerDistance(
-    String sessionId,
-    String userId,
-    double newDistance, {
-    required SessionModel session,
-    required List<PlayerModel> players,
-  }) async {
-      // Identify the player's Firestore doc from the pre-loaded list.
-      final updatedPlayer = players.firstWhereOrNull((p) => p.userId == userId);
-      if (updatedPlayer == null) return;
-
-      final batch = _firestore.batch();
-
-      // Update this player's distance.
-      final myDocRef = _firestore.collection('session_members').doc(updatedPlayer.sessionMemberId);
-      batch.update(myDocRef, {'current_distance': newDistance});
-
-      // Run game logic against the caller-supplied data — no extra reads.
-      final result = await _runGameLogic(session, players, batch, userId, newDistance);
-
-      if (result.endReason != null) {
-          await _calculateAndSaveResults(session, result.finalPlayers, batch, result.endReason!);
-      }
-
       await batch.commit();
   }
 
@@ -700,38 +705,22 @@ class FirestoreService {
   }
 
   Stream<List<SessionModel>> watchUserSessions(String userId) {
-    // This requires a tricky query or a composite index/array contains.
-    // Simpler for now: Query 'session_members' for my userId, then fetch sessions.
-    // Or: watch 'session_members' and use a specialized provider/stream transformer.
-    // 
-    // BUT Firestore's 'array-contains' is best if we store userIds array on the session.
-    // We aren't doing that (we have subcollection/separate collection).
-    // 
-    // Option A: Two-step stream (Member list -> Session list).
-    // Option B: Store `member_ids` array on Session document (Denormalization).
-    //
-    // Let's implement Option B (add member_ids to Session) for easier querying? 
-    // OR stick to what we have:
-    // Query 'session_members' stream, then combine.
-    // 
-    // For this prototype, let's keep it simple: 
-    // We'll watch `session_members` where userId == me.
-    
+    // Step 1: Watch this user's memberships (fires when user joins/leaves).
+    // Step 2: For the resulting session IDs, watch those session documents
+    //         in real-time so member_count and status changes are reflected
+    //         immediately on the home screen.
+
     return _firestore
         .collection('session_members')
         .where('user_id', isEqualTo: userId)
         .snapshots()
         .asyncMap((snapshot) async {
           final sessionIds = snapshot.docs.map((d) => d['session_id'] as String).toList();
-          if (sessionIds.isEmpty) return [];
+          if (sessionIds.isEmpty) return <SessionModel>[];
 
-
-          // Firestore 'in' query supports up to 10 items. 
-          // If >10, we'd need to batch. For prototype, 10 is fine.
-          
+          // Firestore 'in' query supports up to 10 items.
           List<SessionModel> sessions = [];
           
-          // Chunk into 10s
           for (var i = 0; i < sessionIds.length; i += 10) {
             final end = (i + 10 < sessionIds.length) ? i + 10 : sessionIds.length;
             final chunk = sessionIds.sublist(i, end);
