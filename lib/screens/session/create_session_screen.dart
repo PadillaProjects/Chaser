@@ -68,9 +68,7 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
 
   Future<void> _createSession() async {
     if (!_formKey.currentState!.validate()) {
-       ScaffoldMessenger.of(context).showSnackBar(
-         const SnackBar(content: Text('Please check your inputs')),
-       );
+       debugPrint('Please check your inputs');
        return;
     }
 
@@ -78,11 +76,7 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
     final userUid = authService.currentUser?.uid;
 
     if (userUid == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error: Not authenticated')),
-        );
-      }
+        debugPrint('Error: Not authenticated');
       return;
     }
 
@@ -132,11 +126,7 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
         context.replace('/session/$sessionId');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to create session: $e')),
-        );
-      }
+        debugPrint('Failed to create session: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -169,15 +159,18 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
           ],
         ),
       ),
-      body: Form(
-        key: _formKey,
-        child: TabBarView(
-          controller: _tabController,
-          children: [
-            _buildGeneralTab(),
-            _buildRulesTab(),
-            _buildAdvancedTab(),
-          ],
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Form(
+          key: _formKey,
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildGeneralTab(),
+              _buildRulesTab(),
+              _buildAdvancedTab(),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: SafeArea(
@@ -247,6 +240,7 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
             prefixIcon: const Icon(Icons.edit, color: AppColors.bloodRed),
           ),
           validator: (v) => v?.isEmpty == true ? 'Required' : null,
+          textInputAction: TextInputAction.next,
         ),
         const SizedBox(height: 24),
 
@@ -592,6 +586,7 @@ class _CreateSessionScreenState extends ConsumerState<CreateSessionScreen> with 
         ),
       ),
       onChanged: onChanged,
+      textInputAction: TextInputAction.done,
     );
   }
 

@@ -39,7 +39,7 @@ class LocalDistanceNotifier extends Notifier<double?> {
   @override
   double? build() => null;
 
-  void update(double dist) => state = dist;
+  void update(double? dist) => state = dist;
 }
 
 final localDistanceProvider = NotifierProvider<LocalDistanceNotifier, double?>(LocalDistanceNotifier.new);
@@ -131,9 +131,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
           if (mounted) context.go('/');
         }
       } catch (e) {
-        if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error leaving: $e')));
-        }
+        debugPrint('Error leaving: $e');
       }
     }
   }
@@ -198,11 +196,13 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
           ),
         ],
       ),
-      body: sessionAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
-        error: (err, stack) => Center(
-          child: Text('Error: $err', style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed)),
-        ),
+      body: SafeArea(
+        bottom: true,
+        child: sessionAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
+          error: (err, stack) => Center(
+            child: Text('Error: $err', style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed)),
+          ),
         data: (session) {
           if (session.status == 'completed' && _showResults && session.results != null) {
               return GameResultsView(
@@ -221,8 +221,13 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header
-              Container(
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header
+                      Container(
                 padding: const EdgeInsets.all(24),
                 color: AppColors.fogGrey,
                 child: Column(
@@ -364,36 +369,51 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               const Divider(height: 1, color: AppColors.textMuted),
 
               // Players List
-              Expanded(
-                child: playersAsync.when(
-                  loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bloodRed)),
-                  error: (e,s) => Center(
+              playersAsync.when(
+                loading: () => const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: AppColors.bloodRed))),
+                error: (e,s) => Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
                     child: Text('Error loading players: $e', style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed)),
                   ),
-                  data: (players) {
-                    if (players.isEmpty) {
-                      return Center(
+                ),
+                data: (players) {
+                  if (players.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Center(
                         child: Text(
                           'It\'s quiet. Too quiet...',
                           style: GoogleFonts.jetBrainsMono(color: AppColors.textMuted, fontStyle: FontStyle.italic),
                         ),
-                      );
-                    }
+                      ),
+                    );
+                  }
 
-                    return ListView.builder(
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
                       itemCount: players.length,
                       itemBuilder: (context, index) {
                         final player = players[index];
+                        final displayDistance = (player.userId == currentUser?.uid && localDist != null)
+                            ? localDist
+                            : player.currentDistance;
+
                         return SessionPlayerTile(
                           sessionId: widget.sessionId,
                           userId: player.userId,
                           role: player.role,
                           isOwner: player.isOwner,
-                          currentDistance: player.currentDistance,
+                          isSessionOwner: session.ownerId == currentUser?.uid,
+                          currentDistance: displayDistance,
                         );
                       },
                     );
                   },
+                ),
+                    ],
+                  ),
                 ),
               ),
 
@@ -402,6 +422,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
             ],
           );
         },
+      ),
       ),
     );
   }
@@ -467,6 +488,11 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
         final victims = players.where((p) => p.role == 'runner' && p.captureState == 'being_chased' && p.captureDeadline != null).toList();
         final showChaserStatus = isChaser && victims.isNotEmpty;
 
+        final baseStartTime = session.actualStartTime?.toDate() ?? session.scheduledStartTime?.toDate() ?? DateTime.now();
+        final effectiveStartTime = (isChaser && session.headstartDuration > 0)
+            ? baseStartTime.add(Duration(minutes: session.headstartDuration))
+            : baseStartTime;
+
         return Stack(
           children: [
             _GameLoopMonitor(
@@ -480,7 +506,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                 userId: currentUser?.uid,
                 session: session,
                 players: players,
-                startTime: session.actualStartTime?.toDate() ?? session.scheduledStartTime?.toDate() ?? DateTime.now(),
+                startTime: effectiveStartTime,
                 baseOffset: (myPlayer?.role == 'runner') ? session.headstartDistance : 0.0,
               ),
             Column(
@@ -620,13 +646,20 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                     collapsedIconColor: AppColors.textSecondary,
                     iconColor: AppColors.bloodRed,
                     initiallyExpanded: false,
-                    children: players.map((player) => SessionPlayerTile(
-                      sessionId: widget.sessionId,
-                      userId: player.userId,
-                      role: player.role,
-                      isOwner: player.isOwner,
-                      currentDistance: player.currentDistance,
-                    )).toList(),
+                    children: players.map((player) {
+                      final displayDistance = (player.userId == currentUser?.uid && localDist != null)
+                          ? localDist
+                          : player.currentDistance;
+
+                      return SessionPlayerTile(
+                        sessionId: widget.sessionId,
+                        userId: player.userId,
+                        role: player.role,
+                        isOwner: player.isOwner,
+                        isSessionOwner: session.ownerId == currentUser?.uid,
+                        currentDistance: displayDistance,
+                      );
+                    }).toList(),
                   ),
                 ),
                 
@@ -806,24 +839,10 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
 
   Future<void> _startGame(SessionModel session) async {
     try {
+      ref.read(localDistanceProvider.notifier).update(null); // Reset local UI distance
       await _firestoreService.startGame(widget.sessionId, session);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'The Game Begins.',
-              style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
-            ),
-            backgroundColor: AppColors.bloodRed,
-          ),
-        );
-      }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error starting game: $e')),
-        );
-      }
+      debugPrint('Error starting game: $e');
     }
   }
 
@@ -862,17 +881,8 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
     if (confirmed == true) {
         try {
             await _firestoreService.stopGame(sessionId);
-             if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Chase Ended.')),
-                );
-              }
         } catch(e) {
-             if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error stopping game: $e')),
-                );
-              }
+            debugPrint('Error stopping game: $e');
         }
     }
   }
@@ -911,18 +921,10 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
 
     if (confirmed == true) {
          try {
+            ref.read(localDistanceProvider.notifier).update(null); // Reset local UI distance
             await _firestoreService.resetGame(sessionId);
-             if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Chase Reset.')),
-                );
-              }
         } catch(e) {
-             if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error resetting game: $e')),
-                );
-              }
+            debugPrint('Error resetting game: $e');
         }
     }
   }
@@ -992,6 +994,7 @@ class SessionPlayerTile extends ConsumerWidget {
   final String userId;
   final String role;
   final bool isOwner;
+  final bool isSessionOwner;
   final double currentDistance;
 
   const SessionPlayerTile({
@@ -1000,6 +1003,7 @@ class SessionPlayerTile extends ConsumerWidget {
     required this.userId,
     required this.role,
     this.isOwner = false,
+    this.isSessionOwner = false,
     this.currentDistance = 0,
   });
 
@@ -1016,9 +1020,10 @@ class SessionPlayerTile extends ConsumerWidget {
     }
 
     final isChaser = role == 'chaser';
-    final roleColor = isChaser ? AppColors.bloodRed : AppColors.pulseBlue;
-    final roleIcon = isChaser ? Icons.gps_fixed : Icons.directions_run;
-    final roleLabel = isChaser ? 'CHASER' : 'RUNNER';
+    final isSpectator = role == 'spectator';
+    final roleColor = isChaser ? AppColors.bloodRed : (isSpectator ? AppColors.textMuted : AppColors.pulseBlue);
+    final roleIcon = isChaser ? Icons.gps_fixed : (isSpectator ? Icons.visibility : Icons.directions_run);
+    final roleLabel = isChaser ? 'CHASER' : (isSpectator ? 'SPECTATOR' : 'RUNNER');
 
     return userProfileAsync.when(
       data: (user) {
@@ -1053,12 +1058,19 @@ class SessionPlayerTile extends ConsumerWidget {
                       const SizedBox(width: 8),
                       Container(width: 1, height: 12, color: AppColors.textMuted),
                       const SizedBox(width: 8),
-                      Text(
-                        '${effectiveDistance.toStringAsFixed(0)}m',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.toxicGreen,
-                        ),
+                      TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 0, end: effectiveDistance),
+                        duration: const Duration(milliseconds: 1000),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, value, _) {
+                          return Text(
+                            '${value.toInt()}m',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.toxicGreen,
+                            ),
+                          );
+                        },
                       ),
                   ]
               ],
@@ -1066,7 +1078,7 @@ class SessionPlayerTile extends ConsumerWidget {
             trailing: isOwner
                 ? const Icon(Icons.star, color: AppColors.warningYellow)
                 : Icon(Icons.chevron_right, color: AppColors.textMuted),
-            onTap: () => _showPlayerStats(context, ref, user.displayName),
+            onTap: () => _showPlayerStats(context, ref, user.displayName, isMe),
           ),
         );
       },
@@ -1098,7 +1110,7 @@ class SessionPlayerTile extends ConsumerWidget {
     );
   }
 
-  Future<void> _showPlayerStats(BuildContext context, WidgetRef ref, String displayName) async {
+  Future<void> _showPlayerStats(BuildContext context, WidgetRef ref, String displayName, bool isMe) async {
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -1137,32 +1149,7 @@ class SessionPlayerTile extends ConsumerWidget {
                                     _statRow('Escapes', '${stats.totalEscapes}'),
                                     _statRow('Total Distance', '${stats.totalDistance.toStringAsFixed(1)}m'),
                                     const SizedBox(height: 16),
-                                    const Divider(color: AppColors.textMuted),
-                                    Text('DEBUG', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppColors.textMuted, letterSpacing: 2)),
-                                    _statRow('Current Distance', '${liveDistance.toStringAsFixed(1)}m'),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.remove_circle_outline, color: AppColors.bloodRed),
-                                          onPressed: () => _updateDistance(
-                                            liveDistance, -1.0,
-                                          ),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.add_circle_outline, color: AppColors.toxicGreen),
-                                          onPressed: () => _updateDistance(
-                                            liveDistance, 1.0,
-                                          ),
-                                        ),
-                                        TextButton(
-                                          onPressed: () => _setDistanceDialog(
-                                            context, liveDistance,
-                                          ),
-                                          child: Text('SET', style: GoogleFonts.jetBrainsMono(color: AppColors.pulseBlue)),
-                                        ),
-                                      ],
-                                    ),
+
                                 ],
                             );
                         },
@@ -1172,6 +1159,11 @@ class SessionPlayerTile extends ConsumerWidget {
                 }
             ),
             actions: [
+                if (isSessionOwner && !isMe)
+                    TextButton(
+                      onPressed: () => _removePlayerConfirm(context),
+                      child: Text('REMOVE PLAYER', style: GoogleFonts.jetBrainsMono(color: AppColors.bloodRed, letterSpacing: 1, fontWeight: FontWeight.bold)),
+                    ),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: Text('CLOSE', style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary, letterSpacing: 2)),
@@ -1179,6 +1171,37 @@ class SessionPlayerTile extends ConsumerWidget {
             ],
         ),
       );
+  }
+
+  Future<void> _removePlayerConfirm(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.fogGrey,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: Text('PURGE VISITOR?', style: GoogleFonts.specialElite(fontSize: 20, color: AppColors.ghostWhite)),
+        content: Text('Remove this player from the grounds?', style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('CANCEL', style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary)),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.bloodRed,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            child: Text('REMOVE', style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+       await FirestoreService().removePlayer(sessionId, userId);
+       if (context.mounted) Navigator.pop(context); // Close the stats dialog
+    }
   }
 
   Widget _statRow(String label, String value) {
@@ -1194,64 +1217,7 @@ class SessionPlayerTile extends ConsumerWidget {
     );
   }
 
-  Future<void> _updateDistance(
-    double currentDist,
-    double delta,
-  ) async {
-      final newDistance = (currentDist + delta) < 0 ? 0.0 : (currentDist + delta);
-      // Debug controls: simple distance write, no game logic.
-      await FirestoreService().updateDistanceOnly(
-        sessionId, userId, newDistance,
-      );
-  }
 
-  Future<void> _setDistanceDialog(
-    BuildContext context,
-    double currentDist,
-  ) async {
-      final controller = TextEditingController(text: currentDist.toStringAsFixed(1));
-
-      await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-              backgroundColor: AppColors.fogGrey,
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-              title: Text('SET DISTANCE', style: GoogleFonts.creepster(fontSize: 20, color: AppColors.ghostWhite)),
-              content: TextField(
-                  controller: controller,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: GoogleFonts.jetBrainsMono(color: AppColors.ghostWhite),
-                  decoration: const InputDecoration(
-                    labelText: 'Distance (m)',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.zero),
-                  ),
-              ),
-              actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text('CANCEL', style: GoogleFonts.jetBrainsMono(color: AppColors.textSecondary)),
-                  ),
-                  FilledButton(
-                      onPressed: () async {
-                          final val = double.tryParse(controller.text);
-                          if (val != null) {
-                              // Debug: simple distance write, no game logic.
-                              await FirestoreService().updateDistanceOnly(
-                                sessionId, userId, val,
-                              );
-                              if (context.mounted) Navigator.pop(context);
-                          }
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.bloodRed,
-                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                      ),
-                      child: Text('SAVE', style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold)),
-                  ),
-              ],
-          ),
-      );
-  }
 }
 
 
@@ -1769,13 +1735,12 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
     if (!hasPerms || !mounted) return;
 
     debugPrint(
-      'DistanceMonitor: interval=${_tracker.checkIntervalSecs}s  '
-      'noiseGate=${_tracker.noiseGateMeters.toStringAsFixed(1)}m  '
+      'DistanceMonitor: checkInterval=2s (Fluent UI) '
       'writeThreshold=${_tracker.writeThresholdMeters.toStringAsFixed(1)}m',
     );
 
     _timer = Timer.periodic(
-      Duration(seconds: _tracker.checkIntervalSecs),
+      const Duration(seconds: 2),
       (_) => _tick(),
     );
     _tick(); // immediate first check
@@ -1786,6 +1751,13 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
     if (widget.userId == null || !mounted) return;
 
     final now = DateTime.now();
+
+    // Do not accumulate distance during the countdown phase
+    if (now.isBefore(widget.startTime)) {
+        _windowStart = widget.startTime;
+        return;
+    }
+
     double intervalDist = 0.0;
     try {
       intervalDist = await _pedometerService.getDistance(_windowStart, now);
@@ -1795,22 +1767,25 @@ class _DistanceMonitorState extends ConsumerState<_DistanceMonitor> {
     // Always advance window so the next tick gets fresh data.
     _windowStart = now;
 
-    final writeValue = _tracker.tick(intervalMeters: intervalDist);
+    final shouldUpload = _tracker.tick(intervalMeters: intervalDist);
+    final currentDistance = _tracker.totalDistance;
 
-    if (writeValue == null) {
-      debugPrint(
-        'DistanceMonitor: ${intervalDist.toStringAsFixed(1)}m — no write '
-        '(gate=${_tracker.noiseGateMeters.toStringAsFixed(1)}m, '
-        'threshold=${_tracker.writeThresholdMeters.toStringAsFixed(1)}m)',
-      );
-      return;
+    // Instantly update local UI state with the perfectly smooth rolling distance
+    if (mounted) {
+      ref.read(localDistanceProvider.notifier).update(currentDistance);
     }
 
-    // Update local UI state.
-    if (mounted) ref.read(localDistanceProvider.notifier).update(writeValue);
+    if (!shouldUpload) {
+      debugPrint(
+        'DistanceMonitor: ${intervalDist.toStringAsFixed(1)}m added locally. '
+        'Total=${currentDistance.toStringAsFixed(1)}m. '
+        '(writeThreshold=${_tracker.writeThresholdMeters.toStringAsFixed(1)}m)',
+      );
+      return; // Skip firestore network execution
+    }
 
-    debugPrint('DistanceMonitor: writing ${writeValue.toStringAsFixed(1)}m');
-    await _updateFirestore(writeValue);
+    debugPrint('DistanceMonitor: threshold crossed, writing ${currentDistance.toStringAsFixed(1)}m to Firestore');
+    await _updateFirestore(currentDistance);
   }
 
   Future<void> _updateFirestore(double dist) async {

@@ -27,11 +27,7 @@ class ConnectedCharacterCustomizationScreen extends ConsumerWidget {
           initialProfile: userProfile.character,
           onSave: (newProfile) async {
              await FirestoreService().updateCharacterProfile(userProfile.uid, newProfile);
-             if (context.mounted) {
-               ScaffoldMessenger.of(context).showSnackBar(
-                 const SnackBar(content: Text('Character saved successfully.')),
-               );
-             }
+             debugPrint('Character saved successfully.');
           },
         );
       },

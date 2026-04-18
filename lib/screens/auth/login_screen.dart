@@ -32,9 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await _authService.signInWithGoogle();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sign-in failed: $e')),
-        );
+      debugPrint('Sign-in failed: $e');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -43,9 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleEmailAuth() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter email and password')),
-      );
+      debugPrint('Please enter email and password');
       return;
     }
 
@@ -53,9 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       if (_isRegistering) {
         if (_nameController.text.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please enter your name')),
-          );
+          debugPrint('Please enter your name');
            setState(() => _isLoading = false);
           return;
         }
@@ -72,9 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Authentication failed: $e')),
-        );
+        debugPrint('Authentication failed: $e');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

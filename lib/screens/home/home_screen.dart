@@ -494,17 +494,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 if (user != null) {
                   await FirestoreService().joinSessionByCode(code, user.uid);
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('You have entered the zone.')),
-                    );
+                  debugPrint('You have entered the zone.');
                   }
                 }
               } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Access denied: $e')),
-                  );
-                }
+                  debugPrint('Access denied: $e');
               }
             },
             style: FilledButton.styleFrom(

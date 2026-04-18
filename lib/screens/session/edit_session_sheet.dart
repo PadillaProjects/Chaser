@@ -165,11 +165,7 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating session: $e')),
-        );
-      }
+      debugPrint('Error updating session: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -177,16 +173,18 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      padding: EdgeInsets.fromLTRB(0, 16, 0, MediaQuery.of(context).viewInsets.bottom),
-      decoration: const BoxDecoration(
-        color: AppColors.fogGrey,
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          children: [
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        padding: EdgeInsets.fromLTRB(0, 16, 0, MediaQuery.of(context).viewInsets.bottom),
+        decoration: const BoxDecoration(
+          color: AppColors.fogGrey,
+        ),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
             // Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -286,6 +284,7 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -330,9 +329,7 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Delete failed: $e')),
-          );
+          debugPrint('Delete failed: $e');
           setState(() => _isLoading = false);
         }
       }
@@ -362,6 +359,7 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
             ),
           ),
           validator: (v) => v?.isEmpty == true ? 'Required' : null,
+          textInputAction: TextInputAction.next,
         ),
         const SizedBox(height: 16),
 
@@ -724,6 +722,7 @@ class _EditSessionSheetState extends State<EditSessionSheet> with SingleTickerPr
         ),
       ),
       onChanged: onChanged,
+      textInputAction: TextInputAction.done,
     );
   }
 

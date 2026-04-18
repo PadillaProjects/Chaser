@@ -70,17 +70,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     try {
       await ref.read(authServiceProvider).updateDisplayName(_nameController.text.trim());
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Name updated successfully')),
-        );
-      }
+      debugPrint('Name updated successfully');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating name: $e')),
-        );
-      }
+      debugPrint('Error updating name: $e');
     } finally {
       if (mounted) {
         setState(() {

@@ -7,9 +7,9 @@ class AppColors {
   // Core Palette
   static const Color voidBlack = Color(0xFF000000); // Pure absolute black
   static const Color fogGrey = Color(0xFF0D0D0D); // Almost pitch black
-  static const Color bloodRed = Color(0xFFFFFFFF); // Blinding Pure White (Danger/Threat)
+  static const Color bloodRed = Color(0xFF8B0000); // Deep crimson (Danger/Threat)
   static const Color pulseBlue = Color(0xFF8C8C8C); // Ash Grey (Runner/Weakness)
-  static const Color ghostWhite = Color(0xFFE6E6E6); // Off-White
+  static const Color ghostWhite = Color(0xFFFFFFFF); // Pure Stark White
   static const Color toxicGreen = Color(0xFF595959); // Dark Ash (Stamina/Muted)
   static const Color warningYellow = Color(0xFFB3B3B3); // Light Ash (Warning)
 

@@ -42,14 +42,6 @@ class DistanceTracker {
     return (resistanceSecs / 8).clamp(10, 60).toInt();
   }
 
-  /// Minimum metres in one poll window to qualify as real movement.
-  double get noiseGateMeters {
-    const absoluteMax = 5.0;
-    const absoluteMin = 2.0;
-    if (captureResistanceDistance <= 0) return absoluteMin;
-    return (captureResistanceDistance / 10.0).clamp(absoluteMin, absoluteMax);
-  }
-
   /// Minimum cumulative delta before a Firestore write is issued.
   double get writeThresholdMeters {
     final durationBound =
@@ -75,11 +67,11 @@ class DistanceTracker {
   /// since the last tick. The window is always reset by the caller — this
   /// method only cares about the magnitude.
   ///
-  /// Returns the total distance to commit to Firestore if a write should
-  /// fire, or `null` if no write is needed this tick.
-  double? tick({required double intervalMeters}) {
-    // ── Noise gate ──────────────────────────────────────────────────────────
-    if (intervalMeters < noiseGateMeters) return null;
+  /// Returns `true` if the accumulated distance has crossed the threshold to 
+  /// warrant a database write, `false` otherwise.
+  bool tick({required double intervalMeters}) {
+    // ── Ignore zero reading ─────────────────────────────────────────────────
+    if (intervalMeters <= 0.0) return false;
 
     // ── Accumulate ──────────────────────────────────────────────────────────
     _totalDistance += intervalMeters;
@@ -88,9 +80,9 @@ class DistanceTracker {
     final delta = (_totalDistance - _lastWrittenDistance).abs();
     if (delta >= writeThresholdMeters) {
       _lastWrittenDistance = _totalDistance;
-      return _totalDistance;
+      return true;
     }
-    return null;
+    return false;
   }
 
   /// Reset to a fresh state (useful between test scenarios).

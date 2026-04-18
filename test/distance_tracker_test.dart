@@ -17,12 +17,13 @@ DistanceTracker makeTracker({
       baseOffset: baseOffset,
     );
 
-/// Feed [readings] into a [tracker] and collect every write value returned.
+/// Feed [readings] into a [tracker] and collect every total distance value 
+/// at the time an upload is triggered.
 List<double> simulate(DistanceTracker tracker, List<double> readings) {
   final writes = <double>[];
   for (final r in readings) {
-    final w = tracker.tick(intervalMeters: r);
-    if (w != null) writes.add(w);
+    final shouldWrite = tracker.tick(intervalMeters: r);
+    if (shouldWrite) writes.add(tracker.totalDistance);
   }
   return writes;
 }
@@ -31,22 +32,6 @@ List<double> simulate(DistanceTracker tracker, List<double> readings) {
 
 void main() {
   group('Threshold computation', () {
-    test('instant-capture game uses minimum noise gate (2 m)', () {
-      final t = makeTracker(captureResistanceDistance: 0);
-      expect(t.noiseGateMeters, equals(2.0));
-    });
-
-    test('noise gate capped at 5 m for large capture distances', () {
-      final t = makeTracker(captureResistanceDistance: 500);
-      // 500 / 10 = 50 → clamped to 5
-      expect(t.noiseGateMeters, equals(5.0));
-    });
-
-    test('noise gate is 1/10th of capture distance when in range', () {
-      final t = makeTracker(captureResistanceDistance: 30); // 30/10 = 3 m
-      expect(t.noiseGateMeters, closeTo(3.0, 0.001));
-    });
-
     test('write threshold never exceeds captureDistance / 4', () {
       // 7-day game (durationBound=100 m), capture zone 80 m
       // captureBound = 80/4 = 20 m → wins over 100 m
@@ -86,42 +71,20 @@ void main() {
     });
   });
 
-  // ─── Noise gate ─────────────────────────────────────────────────────────────
+  // ─── Continuous Tracking (No Noise Gate) ────────────────────────────────────
 
-  group('Noise gate — sub-threshold readings are silently discarded', () {
-    test('movement below gate returns null', () {
-      // 7-day game so write threshold = 100 m — gate is our only blocker here.
-      // gate = 2 m (instant capture). 1.9 m is below → null.
+  group('Continuous Tracking — all small movements are perfectly accumulated', () {
+    test('small sub-meter steps are instantly added to total distance', () {
       final t = makeTracker(captureResistanceDistance: 0);
-      expect(t.tick(intervalMeters: 1.9), isNull);
-    });
-
-    test('movement exactly at gate is accepted and accumulated', () {
-      // Short game: threshold = 5 m, gate = 2 m.
-      final t = makeTracker(
-        captureResistanceDistance: 0,
-        durationInMinutes: 5,
-      );
-      // 5 ticks of 1 m → below 2 m gate → discarded; total stays 0.
-      for (var i = 0; i < 5; i++) {
-        expect(t.tick(intervalMeters: 1.0), isNull);
-      }
-      expect(t.totalDistance, equals(0.0));
-
-      // Tick of exactly 2 m (= gate) → accepted.
-      // lastWrittenDistance starts at: baseOffset(0) - threshold(5) - 1 = -6
-      // delta = 2 - (-6) = 8 >= 5 → WRITE fires immediately.
-      final w = t.tick(intervalMeters: 2.0);
-      expect(w, isNotNull);
-      expect(w!, closeTo(2.0, 0.001));
-    });
-
-    test('discarded readings do NOT accumulate in total', () {
-      final t = makeTracker(captureResistanceDistance: 0); // gate = 2 m
-      for (var i = 0; i < 100; i++) {
-        t.tick(intervalMeters: 1.5); // always below gate
-      }
-      expect(t.totalDistance, equals(0.0));
+      
+      expect(t.tick(intervalMeters: 0.5), isTrue); // First passes threshold delta
+      expect(t.totalDistance, equals(0.5));
+      
+      expect(t.tick(intervalMeters: 0.5), isFalse); // Accumulated but no upload triggered
+      expect(t.totalDistance, equals(1.0));
+      
+      expect(t.tick(intervalMeters: 0.1), isFalse); 
+      expect(t.totalDistance, closeTo(1.1, 0.001));
     });
   });
 
@@ -130,35 +93,35 @@ void main() {
   group('Write threshold — writes fire at correct cumulative distances', () {
     // NOTE: The tracker initialises lastWrittenDistance = baseOffset - threshold - 1.
     // For baseOffset=0, threshold=5: lastWritten = -6.
-    // This means the FIRST tick that passes the gate immediately triggers a write
+    // This means the FIRST tick immediately triggers a write
     // if it reaches the threshold (delta measured from -6, not 0).
 
-    test('first write fires on first tick that meets gate (delta from -6)', () {
-      // threshold = 5 m, gate = 2 m
+    test('first write fires on first tick (delta from -6)', () {
+      // threshold = 5 m
       final t = makeTracker(durationInMinutes: 10);
 
-      // 4 m tick: passes gate, total=4, delta = 4 - (-6) = 10 >= 5 → WRITE
+      // 4 m tick: total=4, delta = 4 - (-6) = 10 >= 5 → WRITE
       final w = t.tick(intervalMeters: 4.0);
-      expect(w, isNotNull);
-      expect(w!, closeTo(4.0, 0.001));
+      expect(w, isTrue);
+      expect(t.totalDistance, closeTo(4.0, 0.001));
     });
 
     test('no write when movement passes gate but not write threshold after prior write', () {
-      // threshold = 5 m, gate = 2 m
+      // threshold = 5 m
       final t = makeTracker(durationInMinutes: 10);
 
       // First write at 4 m (delta from -6 → 10 >= 5).
       t.tick(intervalMeters: 4.0);
       final lastWritten = t.lastWrittenDistance; // 4 m
 
-      // 3 m tick: passes gate, total=7, delta = 7 - 4 = 3 < 5 → NO write
+      // 3 m tick: total=7, delta = 7 - 4 = 3 < 5 → NO write
       final w = t.tick(intervalMeters: 3.0);
-      expect(w, isNull);
+      expect(w, isFalse);
       expect(t.lastWrittenDistance, equals(lastWritten)); // unchanged
     });
 
     test('second write fires once delta from last write reaches threshold', () {
-      // threshold = 5 m, gate = 2 m
+      // threshold = 5 m
       final t = makeTracker(durationInMinutes: 10);
 
       t.tick(intervalMeters: 4.0); // first write at 4 m
@@ -166,12 +129,12 @@ void main() {
 
       // Another 3 m: total=10, delta = 10 - 4 = 6 >= 5 → WRITE
       final w = t.tick(intervalMeters: 3.0);
-      expect(w, isNotNull);
-      expect(w!, closeTo(10.0, 0.001));
+      expect(w, isTrue);
+      expect(t.totalDistance, closeTo(10.0, 0.001));
     });
 
     test('writes fire repeatedly as player keeps moving', () {
-      // Each tick of 6 m passes gate (2 m) and threshold (5 m) every time.
+      // threshold (5 m) 
       final t = makeTracker(durationInMinutes: 10);
       final writes = simulate(t, [6.0, 6.0, 6.0]);
       // All 3 ticks write because delta always >= 5 m after each write resets.
@@ -198,7 +161,7 @@ void main() {
         captureResistanceDistance: 100,
         durationInMinutes: 10080,
       );
-      // 10 m ticks above 5 m gate.
+      // 10 m ticks.
       // First write: delta from -26 = 36 >= 25 → write at 10 m (first tick).
       // Then delta resets. Next write fires when cumulative delta >= 25 m.
       // 10+10=20 < 25, 10+10+10=30 >= 25 → write at 40 m.
@@ -216,7 +179,7 @@ void main() {
         captureResistanceDistance: 0, // instant
         durationInMinutes: 5, // threshold = 5 m
       );
-      // 3 m ticks (above 2 m gate). First write fires on first tick.
+      // 3 m ticks. First write fires on first tick.
       final writes = simulate(t, [3.0, 3.0, 3.0]);
       expect(writes.isNotEmpty, isTrue);
       expect(writes.first, lessThanOrEqualTo(5.0));
@@ -230,8 +193,8 @@ void main() {
       );
       // lastWritten = 100 - 5 - 1 = 94. First tick of 6 m: total=106, delta=12 >= 5 → WRITE
       final w = t.tick(intervalMeters: 6.0);
-      expect(w, isNotNull);
-      expect(w!, closeTo(106.0, 0.001));
+      expect(w, isTrue);
+      expect(t.totalDistance, closeTo(106.0, 0.001));
     });
   });
 
@@ -248,7 +211,6 @@ void main() {
       // captureBound  = 50/4  = 12.5 m
       // min = 5 m → duration wins
       expect(t.checkIntervalSecs, equals(22));  // 180/8 = 22 s
-      expect(t.noiseGateMeters, equals(5.0));   // 50/10 = 5 (cap hit)
       expect(t.writeThresholdMeters, closeTo(5.0, 0.001));
     });
 
@@ -261,7 +223,6 @@ void main() {
       // durationBound = 10080/100 → clamped to 100 m
       // captureBound  = 200/4 = 50 m → wins
       expect(t.checkIntervalSecs, equals(60));       // 600/8=75→clamped
-      expect(t.noiseGateMeters, equals(5.0));        // 200/10=20→clamped
       expect(t.writeThresholdMeters, closeTo(50.0, 0.001));
     });
 
@@ -281,21 +242,6 @@ void main() {
       final writes = simulate(t, List.filled(50, 0.0));
       expect(writes, isEmpty);
       expect(t.totalDistance, equals(0.0));
-    });
-
-    test('Mixed movement: below-gate ticks never leak into total', () {
-      // gate = 5 m (capture zone 50 m), threshold = 5 m (30-min game)
-      final t = makeTracker(
-        captureResistanceDistance: 50,
-        durationInMinutes: 30,
-      );
-      // Alternate: 4 m (below 5 m gate) and 6 m (above gate).
-      for (var i = 0; i < 10; i++) {
-        t.tick(intervalMeters: 4.0); // discarded
-        t.tick(intervalMeters: 6.0); // counted
-      }
-      // Only 6 m ticks count: 10 × 6 = 60 m total.
-      expect(t.totalDistance, closeTo(60.0, 0.001));
     });
   });
 }

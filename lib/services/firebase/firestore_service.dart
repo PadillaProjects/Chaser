@@ -145,6 +145,23 @@ class FirestoreService {
     await _firestore.collection('sessions').doc(sessionId).delete();
   }
 
+  Future<void> removePlayer(String sessionId, String userId) async {
+    final deterministicId = "${sessionId}_$userId";
+    final docRef = _firestore.collection('session_members').doc(deterministicId);
+    
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(docRef);
+      if (!snapshot.exists) return;
+
+      transaction.delete(docRef);
+      
+      final sessionRef = _firestore.collection('sessions').doc(sessionId);
+      transaction.update(sessionRef, {
+        'member_count': FieldValue.increment(-1),
+      });
+    });
+  }
+
   Future<void> leaveSession(String sessionId, String userId) async {
     // 1. Get actual member count
     final membersSnapshot = await _firestore

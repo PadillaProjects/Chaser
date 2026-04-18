@@ -379,12 +379,19 @@ class _PlayerContent extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  '${distance.toStringAsFixed(0)}m',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 7,
-                    color: AppColors.ghostWhite.withOpacity(0.8),
-                  ),
+                TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0, end: distance),
+                  duration: const Duration(milliseconds: 1000),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, _) {
+                    return Text(
+                      '${value.toInt()}m',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 7,
+                        color: AppColors.ghostWhite.withOpacity(0.8),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
